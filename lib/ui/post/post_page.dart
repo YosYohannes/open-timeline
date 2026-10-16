@@ -22,6 +22,7 @@ import '../widgets/media_tile.dart';
 import '../widgets/snack.dart';
 import 'location_map.dart';
 import 'photo_viewer.dart';
+import 'video_prep.dart';
 
 class PostPage extends StatefulWidget {
   const PostPage({super.key, required this.entry, this.isNew = false});
@@ -497,9 +498,22 @@ class _PostPageState extends State<PostPage> {
     try {
       final files = await pick();
       for (final f in files) {
-        final name = await _store.importMedia(_original, File(f.path));
-        _imported.add(name);
-        if (mounted) setState(() => _media = [..._media, name]);
+        var source = File(f.path);
+        var isTemp = false;
+        if (isVideo(f.path)) {
+          if (!mounted) return;
+          final prepared = await prepareVideo(context, source);
+          if (prepared == null) continue;
+          source = prepared.file;
+          isTemp = prepared.isTemp;
+        }
+        try {
+          final name = await _store.importMedia(_original, source);
+          _imported.add(name);
+          if (mounted) setState(() => _media = [..._media, name]);
+        } finally {
+          if (isTemp) await source.delete();
+        }
       }
     } catch (e) {
       _snack("Couldn't add media: ${_short(e)}");

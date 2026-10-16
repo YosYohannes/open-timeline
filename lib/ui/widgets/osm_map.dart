@@ -6,13 +6,9 @@ import '../app/theme.dart';
 const osmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const osmUserAgent = 'com.opentimeline.open_timeline';
 
-TileLayer osmTileLayer() => TileLayer(
-  urlTemplate: osmTileUrl,
-  userAgentPackageName: osmUserAgent,
-  tileBuilder: darkModeTileBuilder,
-);
+TileLayer osmTileLayer() =>
+    TileLayer(urlTemplate: osmTileUrl, userAgentPackageName: osmUserAgent);
 
-// Required by the OSM tile usage policy.
 class OsmAttribution extends StatelessWidget {
   const OsmAttribution({super.key, this.fontSize = 11});
 
@@ -26,14 +22,14 @@ class OsmAttribution extends StatelessWidget {
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.black.withValues(alpha: 0.7),
+            color: Colors.white.withValues(alpha: 0.8),
             borderRadius: const BorderRadius.only(
               topRight: Radius.circular(kRadius),
             ),
           ),
           child: Text(
             '© OpenStreetMap contributors',
-            style: TextStyle(fontSize: fontSize, color: Colors.white70),
+            style: TextStyle(fontSize: fontSize, color: Colors.black87),
           ),
         ),
       ),

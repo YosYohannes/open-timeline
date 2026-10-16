@@ -3,6 +3,7 @@ import 'dart:io';
 import 'dart:typed_data';
 
 import 'package:googleapis/drive/v3.dart' as drive;
+import 'package:http/http.dart' as http;
 
 import '../models/entry.dart';
 
@@ -177,7 +178,8 @@ class GoogleDriveClient implements DriveClient {
   // ---------------------------------------------------------------- helpers
 
   /// Runs [action]; retries when Drive says "slow down" (429 / rate-limit 403),
-  /// and, for [idempotent] calls, on 5xx. Other API errors become [DriveException].
+  /// and, for [idempotent] calls, on 5xx and dropped connections. Other API errors
+  /// become [DriveException].
   Future<T> _call<T>(
     Future<T> Function() action, {
     bool idempotent = true,
@@ -196,9 +198,23 @@ class GoogleDriveClient implements DriveClient {
           continue;
         }
         throw DriveException(status, e.message ?? 'request failed');
+      } on Exception catch (e) {
+        if (idempotent &&
+            _isConnectionError(e) &&
+            attempt < _retryDelays.length) {
+          await Future<void>.delayed(_retryDelays[attempt]);
+          continue;
+        }
+        rethrow;
       }
     }
   }
+
+  static bool _isConnectionError(Exception e) =>
+      e is SocketException ||
+      e is HttpException ||
+      e is TimeoutException ||
+      e is http.ClientException;
 
   static bool _isRateLimit(drive.DetailedApiRequestError e) {
     final text = '${e.message} ${e.errors.map((x) => x.reason).join(' ')}'

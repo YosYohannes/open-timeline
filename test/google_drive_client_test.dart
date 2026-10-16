@@ -213,6 +213,26 @@ void main() {
     },
   );
 
+  test(
+    'a read survives a dropped connection, a create does not retry it',
+    () async {
+      s.responses.add(
+        (_) => throw http.ClientException('Software caused connection abort'),
+      );
+      s.json(file('z', 'z.md'));
+      expect((await s.client.getFile('z')).id, 'z');
+      expect(s.requests, hasLength(2));
+
+      s.requests.clear();
+      s.responses.add((_) => throw const SocketException('reset'));
+      await expectLater(
+        s.client.createFile('f1', 'a.md', Uint8List.fromList(utf8.encode('x'))),
+        throwsA(isA<SocketException>()),
+      );
+      expect(s.requests, hasLength(1));
+    },
+  );
+
   test('download returns the bytes of the file', () async {
     s.responses.add(
       (_) => http.Response.bytes(

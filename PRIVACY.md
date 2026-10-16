@@ -2,7 +2,7 @@
 
 **Open Timeline** is a private diary app for one person or a small group. This policy explains what the app does with your information.
 
-Last updated: 16 October 2026
+Last updated: 17 October 2026
 
 ## The short version
 
@@ -28,7 +28,7 @@ Open Timeline is an open-source hobby project by Yos Yohannes ([github.com/YosYo
 - **Location**, only when you tap **Current** in a post. The app reads your position once to fill in the post's location. It does not track you, and it does not use location in the background.
 - **Camera**, only when you tap **Photo** or **Video**.
 - **Photos and videos**, only when you choose files to attach.
-- **Internet**, to sync with Google Drive and to load map images.
+- **Internet**, to sync with Google Drive, load map images and check for updates.
 
 ## Google sign-in and Google Drive
 
@@ -42,6 +42,7 @@ You can revoke the app's access at any time at [myaccount.google.com/permissions
 
 - **Google Drive and Google Sign-In**, as described above. Google's [privacy policy](https://policies.google.com/privacy) applies.
 - **OpenStreetMap map images.** When you view a map, the app downloads map tiles from `tile.openstreetmap.org`. OpenStreetMap can see your IP address, the area of the map you are viewing, and the app's identifier. It does not receive your posts. See the [OSMF privacy policy](https://osmfoundation.org/wiki/Privacy_Policy).
+- **GitHub, to check for updates.** When the app opens, it asks `api.github.com` for the latest release of this project. GitHub can see your IP address and the app's request, and nothing from your diary is sent. You can turn this off in **Settings**.
 - **Place search and address lookup.** When you search for a place by name, or use your current location to suggest a place name, the app asks the **location lookup service built into your Android phone**, which on most phones is provided by Google. That service receives the place text you typed or your coordinates. It does not receive your post text.
 
 ## Sharing

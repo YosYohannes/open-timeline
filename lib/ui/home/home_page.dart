@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
 import '../../sync/sync_service.dart';
+import '../../update/update_check.dart';
 import '../app/app_title.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
@@ -15,10 +16,16 @@ import 'map_page.dart';
 import 'timeline_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.auth, required this.sync});
+  const HomePage({
+    super.key,
+    required this.auth,
+    required this.sync,
+    this.updater,
+  });
 
   final AuthService auth;
   final SyncService sync;
+  final UpdateChecker? updater;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -31,12 +38,16 @@ class _HomePageState extends State<HomePage> {
   int _tab = 0;
   bool _mapVisited = false;
   bool _searching = false;
+  UpdateInfo? _update;
 
   @override
   void initState() {
     super.initState();
     _filter.addListener(_onFilterChanged);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _askForEmailIfNeeded());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _askForEmailIfNeeded();
+      _checkForUpdate();
+    });
   }
 
   @override
@@ -80,6 +91,29 @@ class _HomePageState extends State<HomePage> {
     final s = store.settings;
     await store.updateSettings(s.copyWith(me: email));
   }
+
+  Future<void> _checkForUpdate() async {
+    final updater = widget.updater;
+    if (updater == null || !mounted) return;
+    if (!StoreScope.read(context).settings.checkForUpdates) return;
+    final found = await updater.check();
+    if (found != null && mounted) setState(() => _update = found);
+  }
+
+  Widget _updateBanner(UpdateInfo update) => MaterialBanner(
+    leading: const Icon(Icons.system_update_outlined),
+    content: Text('Version ${update.version} is available'),
+    actions: [
+      TextButton(
+        onPressed: () => setState(() => _update = null),
+        child: const Text('Later'),
+      ),
+      TextButton(
+        onPressed: () => widget.updater?.platform.openUrl(update.url),
+        child: const Text('Update'),
+      ),
+    ],
+  );
 
   void _openSettings() {
     Navigator.of(context).push(
@@ -244,16 +278,23 @@ class _HomePageState extends State<HomePage> {
           ),
         ],
       ),
-      body: IndexedStack(
-        index: _tab,
-        sizing: StackFit.expand,
+      body: Column(
         children: [
-          TimelinePage(filter: _filter),
-          CalendarPage(filter: _filter),
-          if (_mapVisited)
-            MapPage(filter: _filter, active: _tab == 2)
-          else
-            const SizedBox.shrink(),
+          if (_update != null) _updateBanner(_update!),
+          Expanded(
+            child: IndexedStack(
+              index: _tab,
+              sizing: StackFit.expand,
+              children: [
+                TimelinePage(filter: _filter),
+                CalendarPage(filter: _filter),
+                if (_mapVisited)
+                  MapPage(filter: _filter, active: _tab == 2)
+                else
+                  const SizedBox.shrink(),
+              ],
+            ),
+          ),
         ],
       ),
       floatingActionButton: FloatingActionButton(

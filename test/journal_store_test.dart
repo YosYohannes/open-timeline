@@ -238,6 +238,49 @@ void main() {
     });
   });
 
+  group('tags', () {
+    test(
+      'rename, merge and delete touch every post and mark it dirty',
+      () async {
+        await store.save(
+          entry(id: '20261016-100000-aaaa', tags: ['boulder', 'trip']),
+        );
+        await store.save(
+          entry(id: '20261016-110000-bbbb', tags: ['Climbing', 'boulder']),
+        );
+        await store.save(entry(id: '20261016-120000-cccc', tags: ['trip']));
+        await store.clearDirty('20261016-100000-aaaa');
+        await store.clearDirty('20261016-110000-bbbb');
+        await store.clearDirty('20261016-120000-cccc');
+        expect(store.tagCounts, {'boulder': 2, 'trip': 2, 'Climbing': 1});
+
+        expect(await store.changeTag('boulder', 'Climbing'), 2);
+        expect(store.byId('20261016-100000-aaaa')!.tags, ['Climbing', 'trip']);
+        expect(store.byId('20261016-110000-bbbb')!.tags, ['Climbing']);
+        expect(store.dirtyIds, {
+          '20261016-100000-aaaa',
+          '20261016-110000-bbbb',
+        });
+
+        expect(await store.changeTag('trip', null), 2);
+        expect(store.allTags, ['Climbing']);
+        expect(store.byId('20261016-120000-cccc')!.tags, isEmpty);
+        expect(await store.changeTag('missing', null), 0);
+      },
+    );
+
+    test('changes survive a reload and keep a conflict flag', () async {
+      await store.writeSynced(entry(tags: ['a'], conflict: true), dirty: false);
+      await store.changeTag('a', 'b');
+      final reloaded = JournalStore(dir);
+      await reloaded.load();
+      addTearDown(reloaded.dispose);
+      final e = reloaded.byId('20261016-143205-k3f9')!;
+      expect(e.tags, ['b']);
+      expect(e.conflict, isTrue);
+    });
+  });
+
   group('delete', () {
     test('turns the post into a tombstone on disk and hides it', () async {
       final e = entry(

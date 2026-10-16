@@ -11,6 +11,7 @@ import 'package:open_filex/open_filex.dart';
 
 import '../../models/entry.dart';
 import '../../models/entry_format.dart';
+import '../../models/tag.dart';
 import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
@@ -413,17 +414,8 @@ class _PostPageState extends State<PostPage> {
     }
   }
 
-  static String? _normalizeTag(String raw) {
-    var t = raw
-        .trim()
-        .replaceAll(RegExp(r'^#+'), '')
-        .replaceAll(RegExp(r'\s+'), '-');
-    t = t.replaceAll(RegExp(r'[,\[\]{}"]'), '');
-    return t.isEmpty ? null : t;
-  }
-
   void _addTag(String raw) {
-    final t = _normalizeTag(raw);
+    final t = normalizeTag(raw);
     if (t == null) return;
     if (_tags.any((x) => x.toLowerCase() == t.toLowerCase())) return;
     setState(() => _tags = [..._tags, t]);

@@ -7,6 +7,7 @@ import '../../sync/sync_service.dart';
 import '../app/store_scope.dart';
 import 'account_actions.dart';
 import 'author_colors.dart';
+import 'tags_page.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.auth, required this.sync});
@@ -264,6 +265,26 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             _section(theme, 'Your colour'),
             const MyColorPicker(),
+            const SizedBox(height: 24),
+            _section(theme, 'Tags'),
+            ListTile(
+              contentPadding: EdgeInsets.zero,
+              leading: const Icon(Icons.sell_outlined),
+              title: const Text('Rename, merge or delete tags'),
+              subtitle: Text(
+                _store.allTags.length == 1
+                    ? '1 tag'
+                    : '${_store.allTags.length} tags',
+              ),
+              trailing: const Icon(Icons.chevron_right),
+              onTap: () => Navigator.of(context)
+                  .push(
+                    MaterialPageRoute<void>(builder: (_) => const TagsPage()),
+                  )
+                  .then((_) {
+                    if (mounted) setState(() {});
+                  }),
+            ),
             const SizedBox(height: 24),
             _section(theme, 'This phone'),
             ListTile(

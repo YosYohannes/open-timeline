@@ -162,6 +162,16 @@ class JournalStore extends ChangeNotifier {
     return tags.toList()..sort(_compareText);
   }
 
+  Map<String, int> get tagCounts {
+    final counts = <String, int>{};
+    for (final e in _visible) {
+      for (final t in e.tags) {
+        counts[t] = (counts[t] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }
+
   List<String> get authors {
     final names = <String>{
       for (final e in _visible)
@@ -215,6 +225,32 @@ class JournalStore extends ChangeNotifier {
     _all[stored.id] = stored;
     _rebuild();
     notifyListeners();
+  });
+
+  /// Renames [from] to [to] on every post, or removes it when [to] is null. Returns the posts changed.
+  Future<int> changeTag(String from, String? to) => _locked(() async {
+    final changed = <Entry>[];
+    final now = DateTime.now().toUtc();
+    for (final e in _all.values) {
+      if (e.deleted || !e.tags.contains(from)) continue;
+      final seen = <String>{};
+      final tags = <String>[];
+      for (final t in e.tags) {
+        final next = t == from ? to : t;
+        if (next != null && seen.add(next.toLowerCase())) tags.add(next);
+      }
+      changed.add(_normalized(e.copyWith(tags: tags, updated: now)));
+    }
+    if (changed.isEmpty) return 0;
+    _dirty.addAll(changed.map((e) => e.id));
+    await _writeState();
+    for (final e in changed) {
+      await _writeEntry(e);
+      _all[e.id] = e;
+    }
+    _rebuild();
+    notifyListeners();
+    return changed.length;
   });
 
   Future<void> delete(String id) => _locked(() async {

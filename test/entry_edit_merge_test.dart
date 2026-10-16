@@ -81,10 +81,17 @@ void main() {
   }
 
   Future<void> save(WidgetTester tester) async {
-    await tester.runAsync(() async {
-      await tester.tap(find.text('Save'));
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    });
+    await tester.runAsync(() => tester.tap(find.text('Save')));
+    for (
+      var i = 0;
+      i < 100 && find.byType(PostPage).evaluate().isNotEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
     expect(find.byType(PostPage), findsNothing);
   }

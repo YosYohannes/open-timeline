@@ -100,10 +100,17 @@ void main() {
   }
 
   Future<void> tapSave(WidgetTester tester) async {
-    await tester.runAsync(() async {
-      await tester.tap(saveButton());
-      await Future<void>.delayed(const Duration(milliseconds: 300));
-    });
+    await tester.runAsync(() => tester.tap(saveButton()));
+    for (
+      var i = 0;
+      i < 100 && find.byType(PostPage).evaluate().isNotEmpty;
+      i++
+    ) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 100)),
+      );
+      await tester.pump();
+    }
     await tester.pumpAndSettle();
   }
 

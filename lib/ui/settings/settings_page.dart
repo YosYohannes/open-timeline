@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:intl/intl.dart';
 
 import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
+import '../../sync/sync_service.dart';
 import '../app/store_scope.dart';
 import 'account_actions.dart';
 import 'author_colors.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.auth});
+  const SettingsPage({super.key, required this.auth, required this.sync});
 
   final AuthService auth;
+  final SyncService sync;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -18,6 +21,9 @@ class SettingsPage extends StatefulWidget {
 class _SettingsPageState extends State<SettingsPage> {
   late final JournalStore _store;
   late final TextEditingController _email;
+  late final TextEditingController _folder;
+  String? _folderError;
+  late bool _editingFolder;
   final _emailFocus = FocusNode();
   bool _authBusy = false;
 
@@ -27,6 +33,8 @@ class _SettingsPageState extends State<SettingsPage> {
     _store = StoreScope.read(context);
     final s = _store.settings;
     _email = TextEditingController(text: s.me);
+    _folder = TextEditingController(text: s.driveFolderId ?? '');
+    _editingFolder = s.driveFolderId == null;
     _emailFocus.addListener(() {
       if (!_emailFocus.hasFocus) _save();
     });
@@ -35,8 +43,71 @@ class _SettingsPageState extends State<SettingsPage> {
   @override
   void dispose() {
     _email.dispose();
+    _folder.dispose();
     _emailFocus.dispose();
     super.dispose();
+  }
+
+  Future<void> _saveFolder() async {
+    final text = _folder.text.trim();
+    final id = parseDriveFolderId(text);
+    if (text.isNotEmpty && id == null) {
+      setState(() => _folderError = 'Not a Drive folder link or ID');
+      return;
+    }
+    setState(() {
+      _folderError = null;
+      if (id != null) _editingFolder = false;
+    });
+    if (id != null) _folder.text = id;
+    final current = _store.settings;
+    if (id == current.driveFolderId) return;
+    await _store.updateSettings(current.copyWith(driveFolderId: id));
+  }
+
+  String _shortId(String id) => id.length <= 12
+      ? id
+      : '${id.substring(0, 6)}…${id.substring(id.length - 4)}';
+
+  Widget _folderField() {
+    final saved = _store.settings.driveFolderId;
+    if (!_editingFolder && saved != null) {
+      return ListTile(
+        contentPadding: EdgeInsets.zero,
+        leading: const Icon(Icons.folder_outlined),
+        title: const Text('Shared Drive folder'),
+        subtitle: Text(_shortId(saved)),
+        trailing: TextButton(
+          onPressed: () => setState(() => _editingFolder = true),
+          child: const Text('Change'),
+        ),
+      );
+    }
+    return TextField(
+      controller: _folder,
+      keyboardType: TextInputType.url,
+      decoration: InputDecoration(
+        labelText: 'Shared Drive folder (link or ID)',
+        errorText: _folderError,
+        border: const OutlineInputBorder(),
+        suffixIcon: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (saved != null)
+              TextButton(
+                onPressed: () => setState(() {
+                  _folder.text = saved;
+                  _folderError = null;
+                  _editingFolder = false;
+                }),
+                child: const Text('Cancel'),
+              ),
+            TextButton(onPressed: _saveFolder, child: const Text('Set')),
+          ],
+        ),
+      ),
+      onSubmitted: (_) => _saveFolder(),
+    );
   }
 
   Future<void> _save() async {
@@ -137,7 +208,10 @@ class _SettingsPageState extends State<SettingsPage> {
 
     return PopScope(
       onPopInvokedWithResult: (didPop, _) {
-        if (didPop) _save();
+        if (didPop) {
+          _save();
+          _saveFolder();
+        }
       },
       child: Scaffold(
         appBar: AppBar(title: const Text('Settings')),
@@ -159,6 +233,34 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             _section(theme, 'Google account'),
             _googleAccount(theme),
+            const SizedBox(height: 24),
+            _section(theme, 'Google Drive'),
+            _folderField(),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Download photos & videos when syncing'),
+              value: _store.settings.downloadMedia,
+              onChanged: (v) async {
+                await _store.updateSettings(
+                  _store.settings.copyWith(downloadMedia: v),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+            ListenableBuilder(
+              listenable: widget.sync,
+              builder: (context, _) {
+                final at = widget.sync.lastAt;
+                final r = widget.sync.last;
+                final when = at == null
+                    ? 'Never'
+                    : '${DateFormat('d MMM HH:mm').format(at)}${r == null ? '' : ' · ↑${r.uploaded} ↓${r.downloaded}'}';
+                return Text(
+                  'Last sync: $when',
+                  style: theme.textTheme.bodySmall,
+                );
+              },
+            ),
             const SizedBox(height: 24),
             _section(theme, 'Your colour'),
             const MyColorPicker(),

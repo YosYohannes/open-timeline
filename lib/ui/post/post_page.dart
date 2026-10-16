@@ -10,7 +10,9 @@ import 'package:latlong2/latlong.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../models/entry.dart';
+import '../../models/entry_format.dart';
 import '../../store/journal_store.dart';
+import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
 import '../widgets/action_row.dart';
@@ -154,9 +156,28 @@ class _PostPageState extends State<PostPage> {
     }
     setState(() => _saving = true);
     try {
-      await _store.save(e);
+      final current = widget.isNew ? null : _store.anyById(_original.id);
+      final raced =
+          current != null &&
+          entryToMarkdown(current) != entryToMarkdown(_original);
+      if (raced) {
+        final merged = mergeEntry(
+          base: _original,
+          local: e,
+          remote: current,
+          localUser: _store.settings.me,
+        );
+        await _store.writeSynced(merged, dirty: true);
+      } else {
+        await _store.save(e);
+      }
       _deleteFiles(_imported.where((n) => !_media.contains(n)));
-      if (mounted) Navigator.of(context).pop();
+      if (!mounted) return;
+      final navigator = Navigator.of(context);
+      if (raced) {
+        showSnack(context, 'Merged with changes synced while you were editing');
+      }
+      navigator.pop();
     } catch (err) {
       if (mounted) {
         setState(() => _saving = false);

@@ -5,6 +5,7 @@ import '../config.dart';
 import '../store/journal_store.dart';
 import 'drive_client.dart';
 import 'google_auth.dart';
+import 'keep_alive.dart';
 import 'sync_engine.dart';
 
 export 'sync_engine.dart' show SyncResult;
@@ -17,12 +18,15 @@ class SyncService extends ChangeNotifier {
     this.auth, {
     DriveClient Function(DriveApi api)? clientFactory,
     this.webClientId = kGoogleWebClientId,
-  }) : _clientFactory = clientFactory ?? GoogleDriveClient.new;
+    KeepAlive? keepAlive,
+  }) : _clientFactory = clientFactory ?? GoogleDriveClient.new,
+       _keepAlive = keepAlive ?? const NoKeepAlive();
 
   final JournalStore store;
   final AuthService auth;
   final String webClientId;
   final DriveClient Function(DriveApi api) _clientFactory;
+  final KeepAlive _keepAlive;
 
   bool _running = false;
   SyncResult? _last;
@@ -49,13 +53,22 @@ class SyncService extends ChangeNotifier {
     if (running != null) return running;
     _running = true;
     notifyListeners();
-    final future = _execute().whenComplete(() {
+    final future = _run().whenComplete(() {
       _running = false;
       _inflight = null;
       notifyListeners();
     });
     _inflight = future;
     return future;
+  }
+
+  Future<SyncResult> _run() async {
+    await _keepAlive.start();
+    try {
+      return await _execute();
+    } finally {
+      await _keepAlive.stop();
+    }
   }
 
   Future<SyncResult> _execute() async {

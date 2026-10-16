@@ -8,6 +8,7 @@ import 'package:open_timeline/models/entry.dart';
 import 'package:open_timeline/store/journal_store.dart';
 import 'package:open_timeline/sync/drive_client.dart';
 import 'package:open_timeline/sync/google_auth.dart';
+import 'package:open_timeline/sync/keep_alive.dart';
 import 'package:open_timeline/sync/sync_service.dart';
 
 import 'fake_drive.dart';
@@ -36,6 +37,16 @@ class FakeAuth extends AuthService {
 
   @override
   Future<void> invalidateToken() async => invalidated++;
+}
+
+class FakeKeepAlive implements KeepAlive {
+  final calls = <String>[];
+
+  @override
+  Future<void> start() async => calls.add('start');
+
+  @override
+  Future<void> stop() async => calls.add('stop');
 }
 
 void main() {
@@ -67,6 +78,23 @@ void main() {
     store.dispose();
     dir.deleteSync(recursive: true);
   });
+
+  test(
+    'the keep-alive runs for exactly the length of a sync, even when it fails',
+    () async {
+      final keepAlive = FakeKeepAlive();
+      final failing = SyncService(
+        store,
+        FakeAuth(),
+        clientFactory: (_) => fake.as('a@x'),
+        webClientId: '',
+        keepAlive: keepAlive,
+      );
+      addTearDown(failing.dispose);
+      await failing.sync();
+      expect(keepAlive.calls, ['start', 'stop']);
+    },
+  );
 
   test('a normal sync fills last, lastAt and tells listeners when it starts and ends', () async {
     await store.save(Entry.create(author: 'a@x').copyWith(text: 'hi'));

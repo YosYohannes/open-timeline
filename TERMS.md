@@ -1,6 +1,6 @@
 # Terms of Service
 
-These terms apply to **Open Timeline**, a private diary app for two people. By installing or using the app, you agree to them. If you do not agree, please do not use the app.
+These terms apply to **Open Timeline**, a private diary app for one person or a small group. By installing or using the app, you agree to them. If you do not agree, please do not use the app.
 
 Last updated: 16 October 2026
 
@@ -26,7 +26,7 @@ The app uses services provided by others, including Google Drive and Google Sign
 
 ## 5. No warranty
 
-The app is provided **"as is" and "as available"**, without warranties of any kind, whether express or implied. This includes any warranty of merchantability, fitness for a particular purpose, availability, accuracy, or that the app will be free of errors, bugs or data loss. The app may contain bugs, including in the way it merges edits made on two phones, and data can be lost.
+The app is provided **"as is" and "as available"**, without warranties of any kind, whether express or implied. This includes any warranty of merchantability, fitness for a particular purpose, availability, accuracy, or that the app will be free of errors, bugs or data loss. The app may contain bugs, including in the way it merges edits made on different phones, and data can be lost.
 
 ## 6. Limitation of liability
 

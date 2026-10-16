@@ -10,7 +10,7 @@ import '../config.dart';
 /// Google Sign-In (google_sign_in v7) plus a ready-to-use [DriveApi].
 ///
 /// Full Drive scope is needed: the narrower `drive.file` scope cannot see files
-/// the partner created in the shared folder.
+/// other people created in the shared folder.
 ///
 /// No method throws. Problems are kept in [error] (null when everything is fine);
 /// the user pressing "cancel" is not an error.
@@ -31,10 +31,19 @@ class AuthService extends ChangeNotifier {
   void Function()? _closeHttp;
   String? _lastToken;
 
-  /// Email of the signed-in account, or null.
-  String? get email => _account?.email;
+  String? _rememberedEmail;
 
-  bool get signedIn => _account != null;
+  /// Email of the signed-in account, or null.
+  String? get email => _account?.email ?? _rememberedEmail;
+
+  bool get signedIn => _account != null || _rememberedEmail != null;
+
+  /// Treats [email] as signed in without asking Google, so nothing pops up at launch.
+  void restore(String? email) {
+    final e = email?.trim();
+    _rememberedEmail = (e == null || e.isEmpty) ? null : e;
+    notifyListeners();
+  }
 
   /// True when a Web client ID is configured.
   bool get configured => webClientId.isNotEmpty;
@@ -42,11 +51,8 @@ class AuthService extends ChangeNotifier {
   /// Last problem, in words the user can read. Cleared by the next successful call.
   String? get error => _error;
 
-  /// Call once at startup. Initializes the plugin and, when [attemptSilent] is
-  /// true, restores a previous sign-in without (much) UI. Note that on Android
-  /// the plugin may show the account chooser sheet if nobody has signed in yet;
-  /// pass false until the user has signed in once (e.g. when `settings.me` is empty).
-  Future<void> init({bool attemptSilent = true}) async {
+  /// Call once at startup. Only prepares the plugin; it never shows UI.
+  Future<void> init() async {
     if (!configured) {
       _error = _notConfigured;
       notifyListeners();
@@ -65,11 +71,6 @@ class AuthService extends ChangeNotifier {
           }
         }, onError: (Object _) {});
       }
-      if (attemptSilent && _account == null) {
-        final attempt = GoogleSignIn.instance
-            .attemptLightweightAuthentication();
-        if (attempt != null) _setAccount(await attempt);
-      }
       _error = null;
     } catch (e) {
       _error = _describe(e);
@@ -86,7 +87,7 @@ class AuthService extends ChangeNotifier {
       return;
     }
     if (!_initialized) {
-      await init(attemptSilent: false);
+      await init();
       if (!_initialized) return;
     }
     try {
@@ -116,6 +117,7 @@ class AuthService extends ChangeNotifier {
     } catch (e) {
       _error = _describe(e);
     }
+    _rememberedEmail = null;
     _setAccount(null);
     notifyListeners();
   }
@@ -125,10 +127,11 @@ class AuthService extends ChangeNotifier {
   /// may be shown (only call that from a button press). Tokens last about an
   /// hour, so ask again for each sync instead of keeping the result.
   Future<DriveApi?> driveApi({bool interactive = false}) async {
-    final account = _account;
-    if (!_initialized || account == null) return null;
+    if (!_initialized || !signedIn) return null;
     try {
-      final client = account.authorizationClient;
+      final client =
+          _account?.authorizationClient ??
+          GoogleSignIn.instance.authorizationClient;
       var authz = await client.authorizationForScopes(const [_scope]);
       if (authz == null && interactive) {
         authz = await client.authorizeScopes(const [_scope]);

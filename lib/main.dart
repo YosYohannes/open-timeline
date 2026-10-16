@@ -14,12 +14,11 @@ import 'ui/settings/account_actions.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   final store = await JournalStore.openDefault();
-  final auth = AuthService();
+  final auth = AuthService()..restore(rememberedGoogleEmail(store));
   runApp(
     OpenTimelineApp(store: store, auth: auth, sync: SyncService(store, auth)),
   );
-  // Silent sign-in only after a previous sign-in; otherwise the plugin may pop up the account chooser.
-  unawaited(auth.init(attemptSilent: hasSignedInBefore(store)));
+  unawaited(auth.init());
 }
 
 class OpenTimelineApp extends StatelessWidget {

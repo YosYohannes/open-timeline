@@ -2,7 +2,7 @@
 
 <h1 align="center">Open Timeline</h1>
 
-<p align="center">A private diary for two. Posts with a time, a place, text, photos and videos, kept in a Google Drive folder you control as plain files.</p>
+<p align="center">A private diary for you and anyone you choose to share it with, one person or many. Posts with a time, a place, text, photos and videos, kept in a Google Drive folder you control as plain files.</p>
 
 <p align="center">
   <img src="docs/screenshots/timeline.png" width="180" alt="Timeline">
@@ -15,17 +15,17 @@
 
 - **Posts** with a date and time, an optional location, a title, text, tags, and any number of photos and videos.
 - **Timeline, Calendar and Map** views, with "On this day" memories, filters by date, tag and person, and search.
-- **Two people, one diary.** Each of you uses your own Google account and your own phone. Both of you point the app at the same shared Drive folder. Each person picks their own colour.
+- **One diary, as many people as you like.** Each person uses their own Google account and their own phone, and everyone points the app at the same shared Drive folder. It works just as well with only you. Each person picks their own colour.
 - **Sync on a button press.** Nothing runs in the background. If you both edit the same post, nothing is lost: different changes are all kept, and clashing text keeps both versions with a warning.
 - **No server and no account with us.** The app talks directly to Google Drive. There is no analytics, advertising or tracking.
 - **Your data stays readable.** Posts are ordinary Markdown files and photos sit beside them, so you can read the diary without the app.
 
 Android only. Open Timeline is a sideloaded app, not on the Play Store: download the APK from [Releases](https://github.com/YosYohannes/open-timeline/releases).
 
-## Using it with a partner
+## Sharing it with others
 
-1. One of you creates a folder called `OpenTimeline` in **My Drive** and shares it with the other as **Editor**.
-2. Both of you install the APK, open **Settings**, tap **Sign in with Google**, and paste the same folder link.
+1. One person creates a folder called `OpenTimeline` in **My Drive** and shares it with everyone else as **Editor**. If you are the only user, skip the sharing.
+2. Everyone installs the APK, opens **Settings**, tap **Sign in with Google**, and paste the same folder link.
 3. Write posts. Press the **Sync** icon whenever you want to exchange them.
 
 Files you upload count against your own Google storage, even inside the shared folder. Only a file's owner can delete it, so deleting a post marks it as deleted and each phone removes the photos it uploaded.

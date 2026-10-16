@@ -344,8 +344,8 @@ class _EmailDialogState extends State<_EmailDialog> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
-            'Posts you write are marked with your email, so you and your partner '
-            'can tell them apart. You can change it later in Settings.',
+            'Posts you write are marked with your email, so everyone sharing '
+            'this diary can tell them apart. You can change it later in Settings.',
           ),
           const SizedBox(height: 16),
           TextField(

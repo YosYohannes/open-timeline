@@ -414,6 +414,48 @@ void main() {
       again.dispose();
     });
 
+    test('my colour persists and survives copyWith', () async {
+      await store.updateSettings(
+        AppSettings(me: 'me@x.com', myColor: 0xFF9DBB9A),
+      );
+      await store.updateSettings(store.settings.copyWith(me: 'new@x.com'));
+      final reloaded = await open();
+      expect(reloaded.settings.me, 'new@x.com');
+      expect(reloaded.settings.myColor, 0xFF9DBB9A);
+      reloaded.dispose();
+    });
+
+    test('people colours come from each person\'s latest post', () async {
+      await store.writeSynced(
+        entry(
+          id: '20261001-100000-aaaa',
+          author: 'p@x.com',
+        ).copyWith(color: 0xFF111111, updated: DateTime.utc(2026, 10, 1)),
+        dirty: false,
+      );
+      await store.writeSynced(
+        entry(
+          id: '20261002-100000-bbbb',
+          author: 'P@x.com',
+        ).copyWith(color: 0xFF222222, updated: DateTime.utc(2026, 10, 2)),
+        dirty: false,
+      );
+      await store.writeSynced(
+        entry(id: '20261003-100000-cccc', author: 'q@x.com'),
+        dirty: false,
+      );
+      expect(store.peopleColors, {'p@x.com': 0xFF222222});
+    });
+
+    test('choosing my colour also stamps my latest post for sync', () async {
+      await store.updateSettings(AppSettings(me: 'a@gmail.com'));
+      await store.writeSynced(entry(), dirty: false);
+      await store.setMyColor(0xFF8FAEC9);
+      expect(store.settings.myColor, 0xFF8FAEC9);
+      expect(store.anyById(entry().id)!.color, 0xFF8FAEC9);
+      expect(store.dirtyIds, contains(entry().id));
+    });
+
     test('settings and dirty ids live side by side in .state.json', () async {
       await store.updateSettings(AppSettings(me: 'me@x.com'));
       await store.save(entry());

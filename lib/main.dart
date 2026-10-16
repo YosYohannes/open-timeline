@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 
 import 'store/journal_store.dart';
 import 'sync/google_auth.dart';
+import 'ui/app/app_title.dart';
 import 'ui/app/store_scope.dart';
+import 'ui/app/theme.dart';
 import 'ui/home/home_page.dart';
 import 'ui/settings/account_actions.dart';
 
@@ -28,24 +30,11 @@ class OpenTimelineApp extends StatelessWidget {
     return StoreScope(
       store: store,
       child: MaterialApp(
-        title: 'Open Timeline',
+        title: kAppTitle,
         debugShowCheckedModeBanner: false,
-        theme: _theme(Brightness.light),
-        darkTheme: _theme(Brightness.dark),
+        theme: buildTheme(),
         home: HomePage(auth: auth),
       ),
-    );
-  }
-
-  static ThemeData _theme(Brightness brightness) {
-    return ThemeData(
-      useMaterial3: true,
-      colorScheme: ColorScheme.fromSeed(
-        seedColor: const Color(0xFF3F7D6E),
-        brightness: brightness,
-      ),
-      appBarTheme: const AppBarTheme(centerTitle: false),
-      cardTheme: const CardThemeData(clipBehavior: Clip.antiAlias),
     );
   }
 }

@@ -17,6 +17,14 @@ String entryToMarkdown(Entry e) {
   b.write('id: ${_q(e.id)}\n');
   b.write('author: ${_q(e.author)}\n');
   b.write('time: ${_q(_formatWithOffset(e.time, e.utcOffsetMinutes))}\n');
+  if (e.title.isNotEmpty) {
+    b.write('title: ${_q(e.title)}\n');
+  }
+  final color = e.color;
+  if (color != null) {
+    final rgb = (color & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
+    b.write('color: ${_q('#${rgb.toUpperCase()}')}\n');
+  }
   final lat = e.lat;
   final lon = e.lon;
   if (lat != null && lon != null && lat.isFinite && lon.isFinite) {
@@ -28,7 +36,6 @@ String entryToMarkdown(Entry e) {
   }
   b.write('tags: ${_list(e.tags)}\n');
   b.write('media: ${_list(e.media)}\n');
-  b.write('starred: ${e.starred}\n');
   b.write('updated: ${_q(e.updated.toUtc().toIso8601String())}\n');
   b.write('deleted: ${e.deleted}\n');
   b.write('conflict: ${e.conflict}\n');
@@ -59,6 +66,11 @@ String entryToMarkdown(Entry e) {
 }
 
 // A JSON string is a valid YAML scalar, but jsonEncode leaves some YAML line breaks and non-printables raw.
+int? _parseColor(String? s) {
+  final m = RegExp(r'^#?([0-9a-fA-F]{6})$').firstMatch(s?.trim() ?? '');
+  return m == null ? null : 0xFF000000 | int.parse(m.group(1)!, radix: 16);
+}
+
 String _q(String s) => jsonEncode(s).replaceAllMapped(
   RegExp('[\u007f-\u009f  ﻿]'),
   (m) => '\\u${m[0]!.codeUnitAt(0).toRadixString(16).padLeft(4, '0')}',
@@ -153,6 +165,8 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
 
   final loc = _parseLocation(yaml['location']) ?? _parseLatLonKeys(yaml);
   final place = _str(yaml['place']);
+  final title = _str(yaml['title'])?.trim() ?? '';
+  final color = _parseColor(_str(yaml['color']));
 
   var bodyLines = lines.sublist(headerEnd + 1);
   final marker = bodyLines.indexWhere((l) => l.trim() == mediaBlockMarker);
@@ -169,10 +183,11 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
     lat: loc?.$1,
     lon: loc?.$2,
     place: (place == null || place.isEmpty) ? null : place,
+    title: title,
+    color: color,
     text: text,
     tags: _stringList(yaml['tags'], splitCommas: true),
     media: _stringList(yaml['media'], splitCommas: false),
-    starred: _bool(yaml['starred']),
     updated: updated,
     deleted: _bool(yaml['deleted']),
     conflict: _bool(yaml['conflict']),

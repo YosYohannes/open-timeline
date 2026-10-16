@@ -9,13 +9,32 @@ import '../models/entry.dart';
 import '../models/entry_format.dart';
 
 class AppSettings {
-  AppSettings({this.me = '', this.driveFolderId, this.downloadMedia = true});
+  AppSettings({
+    this.me = '',
+    this.driveFolderId,
+    this.downloadMedia = true,
+    this.myColor,
+  });
 
   String me;
 
   String? driveFolderId;
 
   bool downloadMedia;
+
+  int? myColor;
+
+  AppSettings copyWith({
+    String? me,
+    String? driveFolderId,
+    bool? downloadMedia,
+    int? myColor,
+  }) => AppSettings(
+    me: me ?? this.me,
+    driveFolderId: driveFolderId ?? this.driveFolderId,
+    downloadMedia: downloadMedia ?? this.downloadMedia,
+    myColor: myColor ?? this.myColor,
+  );
 }
 
 final _yearDir = RegExp(r'^\d{4}$');
@@ -33,6 +52,7 @@ class JournalStore extends ChangeNotifier {
   final Set<String> _dirty = {};
   final Map<String, dynamic> _sync = {};
   List<Entry> _visible = const [];
+  Map<String, int> _peopleColors = const {};
   Future<void> _tail = Future.value();
 
   static Future<JournalStore> openDefault() async {
@@ -101,6 +121,7 @@ class JournalStore extends ChangeNotifier {
           downloadMedia: s['downloadMedia'] is bool
               ? s['downloadMedia'] as bool
               : true,
+          myColor: s['myColor'] is int ? s['myColor'] as int : null,
         );
       }
       final d = json['dirty'];
@@ -161,6 +182,25 @@ class JournalStore extends ChangeNotifier {
         return c != 0 ? c : b.id.compareTo(a.id);
       });
     _visible = List.unmodifiable(list);
+    final latest = <String, Entry>{};
+    for (final e in list) {
+      if (e.color == null) continue;
+      final k = e.author.toLowerCase();
+      final cur = latest[k];
+      if (cur == null || e.updated.isAfter(cur.updated)) latest[k] = e;
+    }
+    _peopleColors = {for (final e in latest.entries) e.key: e.value.color!};
+  }
+
+  Map<String, int> get peopleColors => _peopleColors;
+
+  Future<void> setMyColor(int color) async {
+    await updateSettings(_settings.copyWith(myColor: color));
+    final me = _settings.me.trim().toLowerCase();
+    final mine = _visible
+        .where((e) => e.author.toLowerCase() == me && e.color != color)
+        .firstOrNull;
+    if (mine != null) await save(mine.copyWith(color: color));
   }
 
   Future<void> save(Entry entry) => _locked(() async {
@@ -187,7 +227,6 @@ class JournalStore extends ChangeNotifier {
         time: old.time,
         utcOffsetMinutes: old.utcOffsetMinutes,
         tags: old.tags,
-        starred: old.starred,
         updated: DateTime.now().toUtc(),
         deleted: true,
       ),
@@ -290,6 +329,7 @@ class JournalStore extends ChangeNotifier {
         'me': _settings.me,
         'driveFolderId': _settings.driveFolderId,
         'downloadMedia': _settings.downloadMedia,
+        'myColor': _settings.myColor,
       },
       'dirty': _dirty.toList()..sort(),
       'sync': _sync,

@@ -33,10 +33,11 @@ class Entry {
     this.lat,
     this.lon,
     this.place,
+    this.title = '',
+    this.color,
     this.text = '',
     this.tags = const [],
     this.media = const [],
-    this.starred = false,
     required this.updated,
     this.deleted = false,
     this.conflict = false,
@@ -73,12 +74,14 @@ class Entry {
 
   final String? place;
 
+  final String title;
+
+  final int? color;
+
   final String text;
   final List<String> tags;
 
   final List<String> media;
-
-  final bool starred;
 
   final DateTime updated;
 
@@ -108,10 +111,11 @@ class Entry {
     Object? lat = _keep,
     Object? lon = _keep,
     Object? place = _keep,
+    String? title,
+    int? color,
     String? text,
     List<String>? tags,
     List<String>? media,
-    bool? starred,
     DateTime? updated,
     bool? deleted,
     bool? conflict,
@@ -124,10 +128,11 @@ class Entry {
       lat: identical(lat, _keep) ? this.lat : lat as double?,
       lon: identical(lon, _keep) ? this.lon : lon as double?,
       place: identical(place, _keep) ? this.place : place as String?,
+      title: title ?? this.title,
+      color: color ?? this.color,
       text: text ?? this.text,
       tags: tags ?? this.tags,
       media: media ?? this.media,
-      starred: starred ?? this.starred,
       updated: updated ?? this.updated,
       deleted: deleted ?? this.deleted,
       conflict: conflict ?? this.conflict,

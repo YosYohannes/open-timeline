@@ -13,13 +13,7 @@ Future<bool> signInAndRemember(JournalStore store, AuthService auth) async {
   if (!auth.signedIn || email == null || email.isEmpty) return false;
   final s = store.settings;
   if (s.me != email) {
-    await store.updateSettings(
-      AppSettings(
-        me: email,
-        driveFolderId: s.driveFolderId,
-        downloadMedia: s.downloadMedia,
-      ),
-    );
+    await store.updateSettings(s.copyWith(me: email));
   }
   store.syncData[kGoogleSignedInKey] = true;
   await store.saveState();

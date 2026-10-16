@@ -21,7 +21,10 @@ void newEntry(BuildContext context) {
   }
   Navigator.of(context).push(
     MaterialPageRoute<void>(
-      builder: (_) => PostPage(entry: Entry.create(author: me), isNew: true),
+      builder: (_) => PostPage(
+        entry: Entry.create(author: me).copyWith(color: store.settings.myColor),
+        isNew: true,
+      ),
       fullscreenDialog: true,
     ),
   );

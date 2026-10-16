@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 
+import '../app/theme.dart';
 import '../widgets/author.dart';
 import '../widgets/osm_map.dart';
 
@@ -59,7 +60,7 @@ class _LocationMapState extends State<LocationMap> {
     final theme = Theme.of(context);
 
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: kBorderRadius,
       child: SizedBox(
         height: widget.height,
         child: Stack(
@@ -85,7 +86,9 @@ class _LocationMapState extends State<LocationMap> {
                         width: 44,
                         height: 44,
                         alignment: Alignment.topCenter,
-                        child: AuthorPin(author: widget.author),
+                        child: AuthorPin(
+                          color: authorColorOf(context, widget.author),
+                        ),
                       ),
                     ],
                   ),
@@ -104,7 +107,7 @@ class _LocationMapState extends State<LocationMap> {
                         color: theme.colorScheme.surface.withValues(
                           alpha: 0.92,
                         ),
-                        borderRadius: BorderRadius.circular(20),
+                        borderRadius: kBorderRadius,
                       ),
                       child: Padding(
                         padding: const EdgeInsets.symmetric(

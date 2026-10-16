@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
+import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/entry.dart';
+import '../../store/journal_store.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
+import '../app/theme.dart';
 import '../widgets/author.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
@@ -15,9 +18,10 @@ const _defaultCenter = LatLng(30, 10);
 const _defaultZoom = 2.5;
 
 class MapPage extends StatefulWidget {
-  const MapPage({super.key, required this.filter});
+  const MapPage({super.key, required this.filter, required this.active});
 
   final EntryFilter filter;
+  final bool active;
 
   @override
   State<MapPage> createState() => _MapPageState();
@@ -25,14 +29,32 @@ class MapPage extends StatefulWidget {
 
 class _MapPageState extends State<MapPage> {
   final _controller = MapController();
+  late final JournalStore _store;
   bool _ready = false;
   String? _lastSignature;
   RangeValues? _drag;
+  Widget? _built;
+  List<Marker> _markers = const [];
+  String? _markerSignature;
+
+  @override
+  void initState() {
+    super.initState();
+    _store = StoreScope.read(context);
+    _store.addListener(_onChange);
+    widget.filter.addListener(_onChange);
+  }
 
   @override
   void dispose() {
+    _store.removeListener(_onChange);
+    widget.filter.removeListener(_onChange);
     _controller.dispose();
     super.dispose();
+  }
+
+  void _onChange() {
+    if (widget.active && mounted) setState(() {});
   }
 
   void _fit(List<LatLng> pts) {
@@ -61,112 +83,143 @@ class _MapPageState extends State<MapPage> {
     );
   }
 
+  List<Marker> _markersFor(
+    BuildContext context,
+    List<Entry> located,
+    String signature,
+  ) {
+    if (signature == _markerSignature) return _markers;
+    _markerSignature = signature;
+    return _markers = [
+      for (final e in located)
+        Marker(
+          point: LatLng(e.lat!, e.lon!),
+          width: 44,
+          height: 44,
+          alignment: Alignment.topCenter,
+          child: GestureDetector(
+            behavior: HitTestBehavior.opaque,
+            onTap: () => _preview(context, e),
+            child: AuthorPin(color: authorColorOf(context, e.author)),
+          ),
+        ),
+    ];
+  }
+
   @override
   Widget build(BuildContext context) {
-    final store = StoreScope.of(context);
-    return ListenableBuilder(
-      listenable: widget.filter,
-      builder: (context, _) {
-        final all = store.entries;
-        final located = widget.filter
-            .apply(all)
-            .where((e) => e.hasLocation)
-            .toList();
-        final pts = [for (final e in located) LatLng(e.lat!, e.lon!)];
+    if (!widget.active) return _built ?? const SizedBox.shrink();
+    return _built = _content(context);
+  }
 
-        final signature = located
-            .map((e) => '${e.id}@${e.lat},${e.lon}')
-            .join('|');
-        if (signature != _lastSignature) {
-          final first = _lastSignature == null;
-          _lastSignature = signature;
-          if (!first) {
-            WidgetsBinding.instance.addPostFrameCallback((_) => _fit(pts));
-          }
-        }
+  Widget _content(BuildContext context) {
+    final scheme = Theme.of(context).colorScheme;
+    final all = _store.entries;
+    final located = widget.filter
+        .apply(all)
+        .where((e) => e.hasLocation)
+        .toList();
+    final pts = [for (final e in located) LatLng(e.lat!, e.lon!)];
 
-        final options = MapOptions(
-          initialCenter: pts.isEmpty ? _defaultCenter : pts.first,
-          initialZoom: pts.isEmpty ? _defaultZoom : 13,
-          initialCameraFit: pts.length > 1 && !_isSinglePoint(pts)
-              ? CameraFit.coordinates(
-                  coordinates: pts,
-                  padding: const EdgeInsets.fromLTRB(48, 72, 48, 56),
-                  maxZoom: 16,
-                )
-              : null,
-          interactionOptions: const InteractionOptions(
-            flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
-          ),
-          onMapReady: () => _ready = true,
-        );
+    final colors = '${_store.settings.myColor}${_store.peopleColors}';
+    final signature =
+        '$colors|${located.map((e) => '${e.id}@${e.lat},${e.lon}').join('|')}';
+    if (signature != _lastSignature) {
+      final first = _lastSignature == null;
+      _lastSignature = signature;
+      if (!first) {
+        WidgetsBinding.instance.addPostFrameCallback((_) => _fit(pts));
+      }
+    }
 
-        return Column(
-          children: [
-            Expanded(
-              child: Stack(
+    final options = MapOptions(
+      initialCenter: pts.isEmpty ? _defaultCenter : pts.first,
+      initialZoom: pts.isEmpty ? _defaultZoom : 13,
+      initialCameraFit: pts.length > 1 && !_isSinglePoint(pts)
+          ? CameraFit.coordinates(
+              coordinates: pts,
+              padding: const EdgeInsets.fromLTRB(48, 72, 48, 56),
+              maxZoom: 16,
+            )
+          : null,
+      interactionOptions: const InteractionOptions(
+        flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
+      ),
+      onMapReady: () => _ready = true,
+    );
+
+    return Column(
+      children: [
+        Expanded(
+          child: Stack(
+            children: [
+              FlutterMap(
+                mapController: _controller,
+                options: options,
                 children: [
-                  FlutterMap(
-                    mapController: _controller,
-                    options: options,
-                    children: [
-                      osmTileLayer(),
-                      MarkerLayer(
-                        markers: [
-                          for (final e in located)
-                            Marker(
-                              point: LatLng(e.lat!, e.lon!),
-                              width: 44,
-                              height: 44,
-                              alignment: Alignment.topCenter,
-                              child: GestureDetector(
-                                behavior: HitTestBehavior.opaque,
-                                onTap: () => _preview(context, e),
-                                child: AuthorPin(author: e.author),
-                              ),
-                            ),
-                        ],
+                  osmTileLayer(),
+                  MarkerClusterLayerWidget(
+                    options: MarkerClusterLayerOptions(
+                      maxClusterRadius: 60,
+                      size: const Size(40, 40),
+                      alignment: Alignment.center,
+                      padding: const EdgeInsets.all(50),
+                      maxZoom: 16,
+                      markers: _markersFor(context, located, signature),
+                      builder: (context, markers) => Container(
+                        decoration: BoxDecoration(
+                          color: scheme.surfaceContainerHighest,
+                          borderRadius: kBorderRadius,
+                          border: Border.all(color: scheme.primary),
+                        ),
+                        alignment: Alignment.center,
+                        child: Text(
+                          '${markers.length}',
+                          style: TextStyle(
+                            color: scheme.onSurface,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
                       ),
-                      const OsmAttribution(),
-                    ],
-                  ),
-                  Positioned(
-                    top: 8,
-                    left: 12,
-                    child: Chip(
-                      avatar: const Icon(Icons.place, size: 18),
-                      label: Text(
-                        located.isEmpty
-                            ? 'No posts with a location'
-                            : '${located.length} on map',
-                      ),
-                      visualDensity: VisualDensity.compact,
-                      backgroundColor: Theme.of(context).colorScheme.surface
-                          .withValues(alpha: 0.92),
                     ),
                   ),
-                  Positioned(
-                    top: 4,
-                    right: 8,
-                    child: IconButton.filledTonal(
-                      tooltip: 'Fit to posts',
-                      icon: const Icon(Icons.center_focus_strong_outlined),
-                      onPressed: pts.isEmpty ? null : () => _fit(pts),
-                    ),
-                  ),
+                  const OsmAttribution(),
                 ],
               ),
-            ),
-            _DateSlider(
-              all: all,
-              filter: widget.filter,
-              drag: _drag,
-              onDrag: (v) => setState(() => _drag = v),
-              onDone: () => setState(() => _drag = null),
-            ),
-          ],
-        );
-      },
+              Positioned(
+                top: 8,
+                left: 12,
+                child: Chip(
+                  avatar: const Icon(Icons.place, size: 18),
+                  label: Text(
+                    located.isEmpty
+                        ? 'No posts with a location'
+                        : '${located.length} on map',
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  backgroundColor: scheme.surface.withValues(alpha: 0.92),
+                ),
+              ),
+              Positioned(
+                top: 4,
+                right: 8,
+                child: IconButton.filledTonal(
+                  tooltip: 'Fit to posts',
+                  icon: const Icon(Icons.center_focus_strong_outlined),
+                  onPressed: pts.isEmpty ? null : () => _fit(pts),
+                ),
+              ),
+            ],
+          ),
+        ),
+        _DateSlider(
+          all: all,
+          filter: widget.filter,
+          drag: _drag,
+          onDrag: (v) => setState(() => _drag = v),
+          onDone: () => setState(() => _drag = null),
+        ),
+      ],
     );
   }
 
@@ -195,7 +248,7 @@ class _MapPageState extends State<MapPage> {
                       file: store.mediaFile(e, media),
                       name: media,
                       size: 96,
-                      radius: 12,
+                      radius: kRadius,
                     ),
                     const SizedBox(width: 14),
                   ],
@@ -214,14 +267,17 @@ class _MapPageState extends State<MapPage> {
                                 style: theme.textTheme.titleSmall,
                               ),
                             ),
-                            if (e.starred)
-                              const Icon(
-                                Icons.star_rounded,
-                                size: 20,
-                                color: Color(0xFFF2B01E),
-                              ),
                           ],
                         ),
+                        if (e.title.isNotEmpty) ...[
+                          const SizedBox(height: 4),
+                          Text(
+                            e.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.titleMedium,
+                          ),
+                        ],
                         if (placeText(e) != null) ...[
                           const SizedBox(height: 4),
                           Row(

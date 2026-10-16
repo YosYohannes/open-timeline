@@ -10,10 +10,11 @@ Entry sample({
   Object? lat = 52.3702,
   Object? lon = 4.8952,
   Object? place = 'Scheveningen beach',
+  String title = '',
+  int? color,
   String text = 'Walked along the beach…\n\nSecond paragraph.',
   List<String> tags = const ['beach', 'family'],
   List<String> media = const [],
-  bool starred = false,
   bool deleted = false,
   bool conflict = false,
 }) {
@@ -25,10 +26,11 @@ Entry sample({
     lat: lat as double?,
     lon: lon as double?,
     place: place as String?,
+    title: title,
+    color: color,
     text: text,
     tags: tags,
     media: media,
-    starred: starred,
     updated: DateTime.utc(2026, 10, 16, 12, 40),
     deleted: deleted,
     conflict: conflict,
@@ -44,10 +46,11 @@ void expectSame(Entry actual, Entry expected) {
   expect(actual.lat, expected.lat);
   expect(actual.lon, expected.lon);
   expect(actual.place, expected.place);
+  expect(actual.title, expected.title);
+  expect(actual.color, expected.color);
   expect(actual.text, expected.text);
   expect(actual.tags, expected.tags);
   expect(actual.media, expected.media);
-  expect(actual.starred, expected.starred);
   expect(actual.updated, expected.updated);
   expect(actual.deleted, expected.deleted);
   expect(actual.conflict, expected.conflict);
@@ -72,7 +75,6 @@ location: [52.3702, 4.8952]
 place: "Scheveningen beach"
 tags: ["beach", "family"]
 media: ["20261016-143205-k3f9_x7q2.jpg", "20261016-143205-k3f9_p0a1.mp4"]
-starred: false
 updated: "2026-10-16T12:40:00.000Z"
 deleted: false
 conflict: false
@@ -145,10 +147,36 @@ Second paragraph.
     });
   });
 
+  group('title', () {
+    test('round trips with quotes and unicode', () {
+      final e = sample(title: 'Dinner: "best" stroopwafel ☕');
+      expect(entryFromMarkdown(entryToMarkdown(e)).title, e.title);
+    });
+
+    test('no title line is written when empty', () {
+      expect(entryToMarkdown(sample()), isNot(contains('title:')));
+      expect(entryFromMarkdown(entryToMarkdown(sample())).title, '');
+    });
+  });
+
+  group('colour', () {
+    test('is written as #RRGGBB and read back', () {
+      final md = entryToMarkdown(sample(color: 0xFF9DBB9A));
+      expect(md, contains('color: "#9DBB9A"'));
+      expect(entryFromMarkdown(md).color, 0xFF9DBB9A);
+    });
+
+    test('is omitted when not chosen and ignored when invalid', () {
+      expect(entryToMarkdown(sample()), isNot(contains('color:')));
+      final md = entryToMarkdown(sample(color: 0xFF9DBB9A))
+          .replaceFirst('#9DBB9A', 'pink');
+      expect(entryFromMarkdown(md).color, isNull);
+    });
+  });
+
   group('round trip', () {
     test('every field', () {
       final e = sample(
-        starred: true,
         deleted: true,
         conflict: true,
         media: [
@@ -340,7 +368,6 @@ Second paragraph.
       expect(e.place, isNull);
       expect(e.tags, isEmpty);
       expect(e.media, isEmpty);
-      expect(e.starred, isFalse);
       expect(e.deleted, isFalse);
       expect(e.conflict, isFalse);
       expect(e.text, 'Hi');
@@ -409,7 +436,6 @@ Another line.
       expect(e.place, 'Scheveningen beach');
       expect(e.tags, ['beach', 'family', '2026']);
       expect(e.media, ['a.jpg']);
-      expect(e.starred, isTrue);
       expect(e.deleted, isFalse);
       expect(e.text, 'Nice day. # not a comment in the body\n\nAnother line.');
     });

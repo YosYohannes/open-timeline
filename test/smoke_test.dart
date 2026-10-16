@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:open_timeline/main.dart';
 import 'package:open_timeline/store/journal_store.dart';
+import 'package:open_timeline/ui/app/app_title.dart';
 import 'package:open_timeline/sync/google_auth.dart';
 
 void main() {
@@ -27,9 +28,11 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Open Timeline'), findsOneWidget);
+    expect(find.text(kAppTitle), findsOneWidget);
     expect(find.text('Timeline'), findsOneWidget);
+    expect(find.text('Calendar'), findsOneWidget);
     expect(find.text('Map'), findsOneWidget);
+    expect(find.byTooltip('Filters'), findsOneWidget);
     expect(find.text('No posts yet'), findsOneWidget);
     expect(find.textContaining('Tap the + button'), findsOneWidget);
   });

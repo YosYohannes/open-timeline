@@ -12,6 +12,8 @@ import 'package:open_filex/open_filex.dart';
 import '../../models/entry.dart';
 import '../../store/journal_store.dart';
 import '../app/store_scope.dart';
+import '../app/theme.dart';
+import '../widgets/action_row.dart';
 import '../widgets/author.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
@@ -41,6 +43,7 @@ class _PostPageState extends State<PostPage> {
 
   double? _lat;
   double? _lon;
+  late final TextEditingController _title;
   late final TextEditingController _text;
   late final TextEditingController _place;
   final _tagInput = TextEditingController();
@@ -48,7 +51,6 @@ class _PostPageState extends State<PostPage> {
   final _tagFieldKey = GlobalKey();
   late List<String> _tags;
   late List<String> _media;
-  late bool _starred;
 
   final List<String> _imported = [];
 
@@ -67,12 +69,12 @@ class _PostPageState extends State<PostPage> {
     _wall = DateTime(w.year, w.month, w.day, w.hour, w.minute);
     _lat = e.lat;
     _lon = e.lon;
+    _title = TextEditingController(text: e.title)..addListener(_changed);
     _text = TextEditingController(text: e.text)..addListener(_changed);
     _place = TextEditingController(text: e.place ?? '')..addListener(_changed);
     _tagInput.addListener(_changed);
     _tags = [...e.tags];
     _media = [...e.media];
-    _starred = e.starred;
     final lastLocated = _store.entries.where((x) => x.hasLocation).firstOrNull;
     if (lastLocated != null) {
       _mapFallback = LatLng(lastLocated.lat!, lastLocated.lon!);
@@ -83,6 +85,7 @@ class _PostPageState extends State<PostPage> {
   void dispose() {
     _text.dispose();
     _place.dispose();
+    _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
     super.dispose();
@@ -98,25 +101,29 @@ class _PostPageState extends State<PostPage> {
     final o = _original;
     return _timeChanged ||
         _text.text != o.text ||
+        _title.text.trim() != o.title.trim() ||
         _place.text.trim() != (o.place ?? '').trim() ||
         _lat != o.lat ||
         _lon != o.lon ||
-        _starred != o.starred ||
         _tagInput.text.trim().isNotEmpty ||
         !listEquals(_tags, o.tags) ||
         !listEquals(_media, o.media);
   }
 
+  bool get _isMine =>
+      _original.author.toLowerCase() == _store.settings.me.trim().toLowerCase();
+
   Entry _compose() {
     final place = _place.text.trim();
     var e = _original.copyWith(
+      title: _title.text.trim(),
       text: _text.text,
       tags: List.of(_tags),
       media: List.of(_media),
-      starred: _starred,
       lat: _lat,
       lon: _lon,
       place: place.isEmpty ? null : place,
+      color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
       final local = DateTime(
@@ -537,14 +544,6 @@ class _PostPageState extends State<PostPage> {
         appBar: AppBar(
           title: Text(widget.isNew ? 'New post' : 'Post'),
           actions: [
-            IconButton(
-              tooltip: _starred ? 'Remove star' : 'Star this post',
-              icon: Icon(
-                _starred ? Icons.star_rounded : Icons.star_outline_rounded,
-                color: _starred ? const Color(0xFFF2B01E) : null,
-              ),
-              onPressed: () => setState(() => _starred = !_starred),
-            ),
             FilledButton(
               onPressed: _saving || !_dirty ? null : _save,
               child: const Text('Save'),
@@ -595,28 +594,34 @@ class _PostPageState extends State<PostPage> {
                   ],
                 ),
               ),
-              Row(
-                children: [
-                  Expanded(
+              ActionRow(
+                items: [
+                  ActionItem(
+                    icon: Icons.calendar_today_outlined,
+                    label: DateFormat('EEE d MMM yyyy').format(_wall),
                     flex: 3,
-                    child: OutlinedButton.icon(
-                      onPressed: _pickDate,
-                      icon: const Icon(Icons.calendar_today_outlined, size: 18),
-                      label: Text(DateFormat('EEE d MMM yyyy').format(_wall)),
-                    ),
+                    onPressed: _pickDate,
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(
+                  ActionItem(
+                    icon: Icons.schedule,
+                    label: DateFormat('HH:mm').format(_wall),
                     flex: 2,
-                    child: OutlinedButton.icon(
-                      onPressed: _pickTime,
-                      icon: const Icon(Icons.schedule, size: 18),
-                      label: Text(DateFormat('HH:mm').format(_wall)),
-                    ),
+                    onPressed: _pickTime,
                   ),
                 ],
               ),
               const SizedBox(height: 16),
+
+              TextField(
+                controller: _title,
+                textCapitalization: TextCapitalization.sentences,
+                textInputAction: TextInputAction.next,
+                decoration: const InputDecoration(
+                  hintText: 'Title (optional)',
+                  border: OutlineInputBorder(),
+                ),
+              ),
+              const SizedBox(height: 12),
 
               TextField(
                 controller: _text,
@@ -663,24 +668,22 @@ class _PostPageState extends State<PostPage> {
                 ),
               ),
               const SizedBox(height: 8),
-              Wrap(
-                spacing: 8,
-                runSpacing: 0,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.my_location, size: 18),
-                    label: const Text('Current location'),
+              ActionRow(
+                items: [
+                  ActionItem(
+                    icon: Icons.my_location,
+                    label: 'Current',
                     onPressed: _locBusy ? null : _useCurrentLocation,
                   ),
-                  ActionChip(
-                    avatar: const Icon(Icons.search, size: 18),
-                    label: const Text('Search place'),
+                  ActionItem(
+                    icon: Icons.search,
+                    label: 'Search',
                     onPressed: _locBusy ? null : _searchPlace,
                   ),
                   if (_hasLocation || placeText.isNotEmpty)
-                    ActionChip(
-                      avatar: const Icon(Icons.location_off_outlined, size: 18),
-                      label: const Text('Clear'),
+                    ActionItem(
+                      icon: Icons.location_off_outlined,
+                      label: 'Clear',
                       onPressed: _clearLocation,
                     ),
                 ],
@@ -740,23 +743,21 @@ class _PostPageState extends State<PostPage> {
               const SizedBox(height: 20),
 
               _sectionTitle(theme, 'Photos & videos'),
-              Wrap(
-                spacing: 8,
-                runSpacing: 0,
-                children: [
-                  ActionChip(
-                    avatar: const Icon(Icons.photo_camera_outlined, size: 18),
-                    label: const Text('Camera photo'),
+              ActionRow(
+                items: [
+                  ActionItem(
+                    icon: Icons.photo_camera_outlined,
+                    label: 'Photo',
                     onPressed: _mediaBusy ? null : _addPhoto,
                   ),
-                  ActionChip(
-                    avatar: const Icon(Icons.videocam_outlined, size: 18),
-                    label: const Text('Camera video'),
+                  ActionItem(
+                    icon: Icons.videocam_outlined,
+                    label: 'Video',
                     onPressed: _mediaBusy ? null : _addVideo,
                   ),
-                  ActionChip(
-                    avatar: const Icon(Icons.photo_library_outlined, size: 18),
-                    label: const Text('Gallery'),
+                  ActionItem(
+                    icon: Icons.photo_library_outlined,
+                    label: 'Gallery',
                     onPressed: _mediaBusy ? null : _addFromGallery,
                   ),
                 ],
@@ -782,7 +783,7 @@ class _PostPageState extends State<PostPage> {
                               file: _store.mediaFile(_original, m),
                               name: m,
                               size: 104,
-                              radius: 10,
+                              radius: kRadius,
                               onTap: () => _openMedia(m),
                             ),
                             Positioned(
@@ -790,9 +791,13 @@ class _PostPageState extends State<PostPage> {
                               right: 2,
                               child: Material(
                                 color: Colors.black54,
-                                shape: const CircleBorder(),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: kBorderRadius,
+                                ),
                                 child: InkWell(
-                                  customBorder: const CircleBorder(),
+                                  customBorder: RoundedRectangleBorder(
+                                    borderRadius: kBorderRadius,
+                                  ),
                                   onTap: () => setState(
                                     () => _media = [..._media]..remove(m),
                                   ),
@@ -826,7 +831,7 @@ class _PostPageState extends State<PostPage> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: theme.colorScheme.errorContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: kBorderRadius,
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -871,20 +876,25 @@ class _PostPageState extends State<PostPage> {
     if (suggestions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
-      child: Wrap(
-        spacing: 8,
-        runSpacing: 0,
-        children: [
-          for (final t in suggestions)
-            ActionChip(
-              label: Text('#$t'),
-              visualDensity: VisualDensity.compact,
-              onPressed: () {
-                _tagInput.clear();
-                _addTag(t);
-              },
-            ),
-        ],
+      child: SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final t in suggestions)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  label: Text('#$t'),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () {
+                    _tagInput.clear();
+                    _addTag(t);
+                  },
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

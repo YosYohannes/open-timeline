@@ -69,7 +69,12 @@ class EntryFilter extends ChangeNotifier {
     if (a != null && e.author != a) return false;
     final q = _query.trim().toLowerCase();
     if (q.isNotEmpty) {
-      final hay = [e.text, e.place ?? '', ...e.tags].join('\n').toLowerCase();
+      final hay = [
+        e.title,
+        e.text,
+        e.place ?? '',
+        ...e.tags,
+      ].join('\n').toLowerCase();
       if (!hay.contains(q)) return false;
     }
     return true;

@@ -90,8 +90,12 @@ void main() {
   bool saveEnabled(WidgetTester tester) =>
       tester.widget<FilledButton>(saveButton()).onPressed != null;
 
+  Finder fieldWithHint(String hint) => find.byWidgetPredicate(
+    (w) => w is TextField && w.decoration?.hintText == hint,
+  );
+
   Future<void> typeText(WidgetTester tester, String text) async {
-    await tester.enterText(find.byType(TextField).first, text);
+    await tester.enterText(fieldWithHint('What happened?'), text);
     await tester.pump();
   }
 
@@ -155,14 +159,13 @@ void main() {
     expect(store.byId(_id)!.text, 'Original');
   });
 
-  testWidgets('star toggles and enables Save', (tester) async {
+  testWidgets('a title can be added and is saved', (tester) async {
     await openPost(tester, existing: _post());
-    await tester.tap(find.byTooltip('Star this post'));
+    await tester.enterText(fieldWithHint('Title (optional)'), 'Canal walk');
     await tester.pump();
     expect(saveEnabled(tester), isTrue);
-    await tester.tap(find.byTooltip('Remove star'));
-    await tester.pump();
-    expect(saveEnabled(tester), isFalse);
+    await tapSave(tester);
+    expect(store.byId(_id)!.title, 'Canal walk');
   });
 
   testWidgets('a conflicted post shows the warning; saving clears the flag', (
@@ -276,7 +279,7 @@ void main() {
       expect(find.text('me@example.com'), findsOneWidget);
       expect(saveEnabled(tester), isFalse);
 
-      await tester.enterText(find.byType(TextField).first, 'Hello');
+      await typeText(tester, 'Hello');
       await tester.pump();
       expect(saveEnabled(tester), isTrue);
 

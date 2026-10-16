@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 
-import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
+import '../app/app_title.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
 import '../settings/account_actions.dart';
 import '../settings/settings_page.dart';
-import 'filter_bar.dart';
+import 'calendar_page.dart';
+import 'filter_sheet.dart';
 import 'filters.dart';
 import 'map_page.dart';
 import 'timeline_page.dart';
@@ -74,13 +75,7 @@ class _HomePageState extends State<HomePage> {
     );
     if (email == null || !mounted) return;
     final s = store.settings;
-    await store.updateSettings(
-      AppSettings(
-        me: email,
-        driveFolderId: s.driveFolderId,
-        downloadMedia: s.downloadMedia,
-      ),
-    );
+    await store.updateSettings(s.copyWith(me: email));
   }
 
   void _openSettings() {
@@ -116,7 +111,7 @@ class _HomePageState extends State<HomePage> {
                 style: theme.textTheme.titleMedium,
                 onChanged: (v) => _filter.query = v,
               )
-            : const Text('Open Timeline'),
+            : const Text(kAppTitle),
         actions: [
           if (!_searching)
             IconButton(
@@ -134,28 +129,32 @@ class _HomePageState extends State<HomePage> {
               },
             ),
           IconButton(
+            icon: Badge(
+              smallSize: 8,
+              backgroundColor: theme.colorScheme.primary,
+              isLabelVisible: hasSheetFilters(_filter),
+              child: const Icon(Icons.filter_alt_outlined),
+            ),
+            tooltip: 'Filters',
+            onPressed: () => showFilterSheet(context, _filter),
+          ),
+          IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',
             onPressed: _openSettings,
           ),
         ],
       ),
-      body: Column(
+      body: IndexedStack(
+        index: _tab,
+        sizing: StackFit.expand,
         children: [
-          FilterBar(filter: _filter),
-          Expanded(
-            child: IndexedStack(
-              index: _tab,
-              sizing: StackFit.expand,
-              children: [
-                TimelinePage(filter: _filter),
-                if (_mapVisited)
-                  MapPage(filter: _filter)
-                else
-                  const SizedBox.shrink(),
-              ],
-            ),
-          ),
+          TimelinePage(filter: _filter),
+          CalendarPage(filter: _filter),
+          if (_mapVisited)
+            MapPage(filter: _filter, active: _tab == 2)
+          else
+            const SizedBox.shrink(),
         ],
       ),
       floatingActionButton: FloatingActionButton(
@@ -167,13 +166,18 @@ class _HomePageState extends State<HomePage> {
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() {
           _tab = i;
-          if (i == 1) _mapVisited = true;
+          if (i == 2) _mapVisited = true;
         }),
         destinations: const [
           NavigationDestination(
             icon: Icon(Icons.view_timeline_outlined),
             selectedIcon: Icon(Icons.view_timeline),
             label: 'Timeline',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.calendar_month_outlined),
+            selectedIcon: Icon(Icons.calendar_month),
+            label: 'Calendar',
           ),
           NavigationDestination(
             icon: Icon(Icons.map_outlined),

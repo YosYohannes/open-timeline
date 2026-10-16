@@ -4,6 +4,7 @@ import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
 import '../app/store_scope.dart';
 import 'account_actions.dart';
+import 'author_colors.dart';
 
 class SettingsPage extends StatefulWidget {
   const SettingsPage({super.key, required this.auth});
@@ -42,13 +43,7 @@ class _SettingsPageState extends State<SettingsPage> {
     final current = _store.settings;
     final email = _email.text.trim();
     if (email.isEmpty || email == current.me) return;
-    await _store.updateSettings(
-      AppSettings(
-        me: email,
-        driveFolderId: current.driveFolderId,
-        downloadMedia: current.downloadMedia,
-      ),
-    );
+    await _store.updateSettings(current.copyWith(me: email));
   }
 
   Future<void> _signIn(AuthService auth) async {
@@ -164,6 +159,9 @@ class _SettingsPageState extends State<SettingsPage> {
             const SizedBox(height: 24),
             _section(theme, 'Google account'),
             _googleAccount(theme),
+            const SizedBox(height: 24),
+            _section(theme, 'Your colour'),
+            const MyColorPicker(),
             const SizedBox(height: 24),
             _section(theme, 'This phone'),
             ListTile(

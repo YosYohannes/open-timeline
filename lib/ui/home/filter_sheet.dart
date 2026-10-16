@@ -5,91 +5,112 @@ import '../widgets/author.dart';
 import '../widgets/format.dart';
 import 'filters.dart';
 
-class FilterBar extends StatelessWidget {
-  const FilterBar({super.key, required this.filter});
+bool hasSheetFilters(EntryFilter f) =>
+    f.range != null || f.tag != null || f.author != null;
+
+Future<void> showFilterSheet(BuildContext context, EntryFilter filter) {
+  return showModalBottomSheet<void>(
+    context: context,
+    showDragHandle: true,
+    builder: (_) => _FilterSheet(filter: filter),
+  );
+}
+
+class _FilterSheet extends StatelessWidget {
+  const _FilterSheet({required this.filter});
 
   final EntryFilter filter;
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: filter,
-      builder: (context, _) {
-        final range = filter.range;
-        return SizedBox(
-          height: 48,
-          child: ListView(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    final theme = Theme.of(context);
+    return SafeArea(
+      child: ListenableBuilder(
+        listenable: filter,
+        builder: (context, _) {
+          final range = filter.range;
+          return Column(
+            mainAxisSize: MainAxisSize.min,
             children: [
-              // First so it never scrolls out of sight.
-              if (filter.active)
-                Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ActionChip(
-                    avatar: const Icon(Icons.filter_alt_off_outlined, size: 18),
-                    label: const Text('Clear'),
-                    onPressed: filter.clear,
-                    visualDensity: VisualDensity.compact,
-                  ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(24, 0, 12, 4),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Filters',
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                    if (hasSheetFilters(filter))
+                      TextButton(
+                        onPressed: () {
+                          filter.range = null;
+                          filter.tag = null;
+                          filter.author = null;
+                        },
+                        child: const Text('Clear'),
+                      ),
+                  ],
                 ),
-              _chip(
+              ),
+              _row(
                 icon: Icons.date_range,
-                label: range == null
-                    ? 'Dates'
+                title: 'Dates',
+                value: range == null
+                    ? null
                     : range.start == range.end
                     ? formatShortDay(range.start)
                     : '${formatShortDay(range.start)} – ${formatShortDay(range.end)}',
-                active: range != null,
-                onPressed: () => _pickRange(context),
+                empty: 'Any date',
+                onTap: () => _pickRange(context),
                 onClear: () => filter.range = null,
               ),
-              _chip(
+              _row(
                 icon: Icons.sell_outlined,
-                label: filter.tag == null ? 'Tag' : '#${filter.tag}',
-                active: filter.tag != null,
-                onPressed: () => _pickTag(context),
+                title: 'Tag',
+                value: filter.tag == null ? null : '#${filter.tag}',
+                empty: 'Any tag',
+                onTap: () => _pickTag(context),
                 onClear: () => filter.tag = null,
               ),
-              _chip(
+              _row(
                 icon: Icons.person_outline,
-                label: filter.author == null
-                    ? 'Author'
-                    : _shortAuthor(filter.author!),
-                active: filter.author != null,
-                onPressed: () => _pickAuthor(context),
+                title: 'Author',
+                value: filter.author,
+                empty: 'Everyone',
+                onTap: () => _pickAuthor(context),
                 onClear: () => filter.author = null,
               ),
+              const SizedBox(height: 8),
             ],
-          ),
-        );
-      },
+          );
+        },
+      ),
     );
   }
 
-  static String _shortAuthor(String a) {
-    final at = a.indexOf('@');
-    return at > 0 ? a.substring(0, at) : a;
-  }
-
-  Widget _chip({
+  Widget _row({
     required IconData icon,
-    required String label,
-    required bool active,
-    required VoidCallback onPressed,
+    required String title,
+    required String? value,
+    required String empty,
+    required VoidCallback onTap,
     required VoidCallback onClear,
   }) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 8),
-      child: InputChip(
-        avatar: Icon(icon, size: 18),
-        label: Text(label),
-        selected: active,
-        showCheckmark: false,
-        onPressed: onPressed,
-        onDeleted: active ? onClear : null,
-        visualDensity: VisualDensity.compact,
-      ),
+    return ListTile(
+      leading: Icon(icon),
+      title: Text(title),
+      subtitle: Text(value ?? empty),
+      selected: value != null,
+      trailing: value == null
+          ? const Icon(Icons.chevron_right)
+          : IconButton(
+              tooltip: 'Clear $title',
+              icon: const Icon(Icons.close),
+              onPressed: onClear,
+            ),
+      onTap: onTap,
     );
   }
 

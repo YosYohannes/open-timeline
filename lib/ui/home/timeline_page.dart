@@ -3,7 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/entry.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
-import '../widgets/author.dart';
+import '../app/theme.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
 import 'filters.dart';
@@ -95,6 +95,8 @@ class _DayHeader extends StatelessWidget {
   }
 }
 
+const _thumbSize = 96.0;
+
 class EntryCard extends StatelessWidget {
   const EntryCard({super.key, required this.entry});
 
@@ -102,20 +104,44 @@ class EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final store = StoreScope.read(context);
     final theme = Theme.of(context);
     final place = placeText(entry);
     final text = entry.text.trim();
+    final hasMedia = entry.media.isNotEmpty;
+    final textLines = !hasMedia ? 6 : (entry.tags.isEmpty ? 4 : 3);
+
+    final body = [
+      if (text.isNotEmpty)
+        Text(text, maxLines: textLines, overflow: TextOverflow.ellipsis),
+      if (entry.tags.isNotEmpty) ...[
+        if (text.isNotEmpty) const SizedBox(height: 8),
+        Wrap(
+          spacing: 6,
+          runSpacing: -6,
+          children: [
+            for (final t in entry.tags)
+              Chip(
+                label: Text('#$t'),
+                visualDensity: VisualDensity.compact,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                labelStyle: theme.textTheme.labelSmall,
+                padding: EdgeInsets.zero,
+                side: BorderSide.none,
+                backgroundColor: theme.colorScheme.secondaryContainer
+                    .withValues(alpha: 0.6),
+              ),
+          ],
+        ),
+      ],
+    ];
 
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       elevation: 0,
       color: theme.colorScheme.surfaceContainerLow,
       shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(14),
-        side: BorderSide(
-          color: theme.colorScheme.outlineVariant.withValues(alpha: 0.5),
-        ),
+        borderRadius: kBorderRadius,
+        side: BorderSide(color: theme.colorScheme.outlineVariant),
       ),
       child: InkWell(
         onTap: () => openEntry(context, entry.id),
@@ -132,9 +158,18 @@ class EntryCard extends StatelessWidget {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                  const SizedBox(width: 8),
-                  AuthorDot(author: entry.author),
-                  const Spacer(),
+                  if (entry.title.isNotEmpty) ...[
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        entry.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.titleMedium,
+                      ),
+                    ),
+                  ] else
+                    const Spacer(),
                   if (entry.conflict)
                     Tooltip(
                       message: 'Conflicting edits were merged - please review',
@@ -142,15 +177,6 @@ class EntryCard extends StatelessWidget {
                         Icons.warning_amber_rounded,
                         size: 20,
                         color: theme.colorScheme.error,
-                      ),
-                    ),
-                  if (entry.starred)
-                    const Padding(
-                      padding: EdgeInsets.only(left: 4),
-                      child: Icon(
-                        Icons.star_rounded,
-                        size: 22,
-                        color: Color(0xFFF2B01E),
                       ),
                     ),
                 ],
@@ -178,48 +204,70 @@ class EntryCard extends StatelessWidget {
                   ],
                 ),
               ],
-              if (text.isNotEmpty) ...[
+              if (body.isNotEmpty || hasMedia) ...[
                 const SizedBox(height: 8),
-                Text(text, maxLines: 6, overflow: TextOverflow.ellipsis),
-              ],
-              if (entry.media.isNotEmpty) ...[
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 84,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    itemCount: entry.media.length,
-                    separatorBuilder: (_, _) => const SizedBox(width: 6),
-                    itemBuilder: (_, i) => MediaTile(
-                      file: store.mediaFile(entry, entry.media[i]),
-                      name: entry.media[i],
-                    ),
-                  ),
-                ),
-              ],
-              if (entry.tags.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: -6,
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    for (final t in entry.tags)
-                      Chip(
-                        label: Text('#$t'),
-                        visualDensity: VisualDensity.compact,
-                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                        labelStyle: theme.textTheme.labelSmall,
-                        padding: EdgeInsets.zero,
-                        side: BorderSide.none,
-                        backgroundColor: theme.colorScheme.secondaryContainer
-                            .withValues(alpha: 0.6),
+                    if (body.isNotEmpty)
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: body,
+                        ),
                       ),
+                    if (hasMedia && body.isNotEmpty) const SizedBox(width: 10),
+                    if (hasMedia) _Thumbnail(entry: entry),
                   ],
                 ),
               ],
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _Thumbnail extends StatelessWidget {
+  const _Thumbnail({required this.entry});
+
+  final Entry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final store = StoreScope.read(context);
+    final more = entry.media.length - 1;
+    return SizedBox(
+      width: _thumbSize,
+      height: _thumbSize,
+      child: Stack(
+        children: [
+          MediaTile(
+            file: store.mediaFile(entry, entry.media.first),
+            name: entry.media.first,
+            size: _thumbSize,
+          ),
+          if (more > 0)
+            Positioned(
+              right: 4,
+              bottom: 4,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: Colors.black.withValues(alpha: 0.7),
+                  borderRadius: kBorderRadius,
+                ),
+                child: Text(
+                  '+$more',
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ),
+        ],
       ),
     );
   }

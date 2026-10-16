@@ -3,6 +3,7 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 
 import '../../models/entry.dart';
+import '../app/theme.dart';
 
 class MediaTile extends StatelessWidget {
   const MediaTile({
@@ -10,7 +11,7 @@ class MediaTile extends StatelessWidget {
     required this.file,
     required this.name,
     this.size = 84,
-    this.radius = 8,
+    this.radius = kRadius,
     this.onTap,
   });
 

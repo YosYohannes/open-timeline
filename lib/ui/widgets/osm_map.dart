@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
+import '../app/theme.dart';
+
 const osmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
 const osmUserAgent = 'com.opentimeline.open_timeline';
 
-TileLayer osmTileLayer() =>
-    TileLayer(urlTemplate: osmTileUrl, userAgentPackageName: osmUserAgent);
+TileLayer osmTileLayer() => TileLayer(
+  urlTemplate: osmTileUrl,
+  userAgentPackageName: osmUserAgent,
+  tileBuilder: darkModeTileBuilder,
+);
 
 // Required by the OSM tile usage policy.
 class OsmAttribution extends StatelessWidget {
@@ -17,16 +22,18 @@ class OsmAttribution extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: Align(
-        alignment: Alignment.bottomRight,
+        alignment: Alignment.bottomLeft,
         child: Container(
           padding: const EdgeInsets.symmetric(horizontal: 5, vertical: 2),
           decoration: BoxDecoration(
-            color: Colors.white.withValues(alpha: 0.8),
-            borderRadius: const BorderRadius.only(topLeft: Radius.circular(6)),
+            color: Colors.black.withValues(alpha: 0.7),
+            borderRadius: const BorderRadius.only(
+              topRight: Radius.circular(kRadius),
+            ),
           ),
           child: Text(
             '© OpenStreetMap contributors',
-            style: TextStyle(fontSize: fontSize, color: Colors.black87),
+            style: TextStyle(fontSize: fontSize, color: Colors.white70),
           ),
         ),
       ),

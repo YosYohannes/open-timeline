@@ -457,6 +457,17 @@ void main() {
       again.dispose();
     });
 
+    test('the update check is on by default and can be turned off', () async {
+      expect(store.settings.checkForUpdates, isTrue);
+      await store.updateSettings(
+        store.settings.copyWith(me: 'me@x.com', checkForUpdates: false),
+      );
+      await store.updateSettings(store.settings.copyWith(me: 'new@x.com'));
+      final reloaded = await open();
+      expect(reloaded.settings.checkForUpdates, isFalse);
+      reloaded.dispose();
+    });
+
     test('my colour persists and survives copyWith', () async {
       await store.updateSettings(
         AppSettings(me: 'me@x.com', myColor: 0xFF9DBB9A),

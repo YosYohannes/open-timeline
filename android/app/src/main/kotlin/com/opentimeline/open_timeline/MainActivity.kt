@@ -3,6 +3,7 @@ package com.opentimeline.open_timeline
 import android.Manifest
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.net.Uri
 import android.os.Build
 import androidx.media3.common.util.UnstableApi
 import io.flutter.embedding.android.FlutterActivity
@@ -25,6 +26,19 @@ class MainActivity : FlutterActivity() {
                     "stop" -> {
                         stopService(service)
                         result.success(null)
+                    }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "open_timeline/app")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "version" -> result.success(packageManager.getPackageInfo(packageName, 0).versionName)
+                    "open" -> try {
+                        startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(call.arguments as String)))
+                        result.success(null)
+                    } catch (e: Exception) {
+                        result.error("open", e.message, null)
                     }
                     else -> result.notImplemented()
                 }

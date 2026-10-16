@@ -286,6 +286,20 @@ class _SettingsPageState extends State<SettingsPage> {
                   }),
             ),
             const SizedBox(height: 24),
+            _section(theme, 'Updates'),
+            SwitchListTile(
+              contentPadding: EdgeInsets.zero,
+              title: const Text('Check for a new version'),
+              subtitle: const Text('Asks GitHub once when the app opens'),
+              value: _store.settings.checkForUpdates,
+              onChanged: (v) async {
+                await _store.updateSettings(
+                  _store.settings.copyWith(checkForUpdates: v),
+                );
+                if (mounted) setState(() {});
+              },
+            ),
+            const SizedBox(height: 24),
             _section(theme, 'This phone'),
             ListTile(
               contentPadding: EdgeInsets.zero,

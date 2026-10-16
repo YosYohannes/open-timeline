@@ -14,6 +14,7 @@ class AppSettings {
     this.driveFolderId,
     this.downloadMedia = true,
     this.myColor,
+    this.checkForUpdates = true,
   });
 
   String me;
@@ -24,16 +25,20 @@ class AppSettings {
 
   int? myColor;
 
+  bool checkForUpdates;
+
   AppSettings copyWith({
     String? me,
     String? driveFolderId,
     bool? downloadMedia,
     int? myColor,
+    bool? checkForUpdates,
   }) => AppSettings(
     me: me ?? this.me,
     driveFolderId: driveFolderId ?? this.driveFolderId,
     downloadMedia: downloadMedia ?? this.downloadMedia,
     myColor: myColor ?? this.myColor,
+    checkForUpdates: checkForUpdates ?? this.checkForUpdates,
   );
 }
 
@@ -122,6 +127,9 @@ class JournalStore extends ChangeNotifier {
               ? s['downloadMedia'] as bool
               : true,
           myColor: s['myColor'] is int ? s['myColor'] as int : null,
+          checkForUpdates: s['checkForUpdates'] is bool
+              ? s['checkForUpdates'] as bool
+              : true,
         );
       }
       final d = json['dirty'];
@@ -366,6 +374,7 @@ class JournalStore extends ChangeNotifier {
         'driveFolderId': _settings.driveFolderId,
         'downloadMedia': _settings.downloadMedia,
         'myColor': _settings.myColor,
+        'checkForUpdates': _settings.checkForUpdates,
       },
       'dirty': _dirty.toList()..sort(),
       'sync': _sync,

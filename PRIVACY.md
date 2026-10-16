@@ -1,6 +1,6 @@
 # Privacy Policy
 
-**Open Timeline** is a private diary app for two people. This policy explains what the app does with your information.
+**Open Timeline** is a private diary app for one person or a small group. This policy explains what the app does with your information.
 
 Last updated: 16 October 2026
 
@@ -21,7 +21,7 @@ Open Timeline is an open-source hobby project by Yos Yohannes ([github.com/YosYo
 | Your posts: text, titles, tags, time, optional location, photos and videos | This is the diary | Stored in the app's private storage on your phone, and copied to the Google Drive folder you choose when you press **Sync** |
 | Your Google account email | To sign in, and to mark which posts are yours | Stays on your phone and, as the author of each post, in your Drive folder |
 | Google Drive access | To read and write the diary folder | A token held by Google on your phone. The developer never receives it |
-| Your chosen colour, folder ID and settings | To remember your preferences | Stored on your phone. Your colour is also saved inside your posts so your partner's phone can show it |
+| Your chosen colour, folder ID and settings | To remember your preferences | Stored on your phone. Your colour is also saved inside your posts so other people's phones can show it |
 
 ## Permissions the app asks for
 
@@ -32,7 +32,7 @@ Open Timeline is an open-source hobby project by Yos Yohannes ([github.com/YosYo
 
 ## Google sign-in and Google Drive
 
-The app uses Google Sign-In and the Google Drive API to sync your diary. It asks for the `drive` permission. This permission covers your whole Drive, because a narrower one cannot see files that your partner creates in the shared folder. **The app only lists, reads and writes files inside the folder you select**, and it does not look at the rest of your Drive.
+The app uses Google Sign-In and the Google Drive API to sync your diary. It asks for the `drive` permission. This permission covers your whole Drive, because a narrower one cannot see files that other people create in the shared folder. **The app only lists, reads and writes files inside the folder you select**, and it does not look at the rest of your Drive.
 
 The use of information received from Google APIs adheres to the [Google API Services User Data Policy](https://developers.google.com/terms/api-services-user-data-policy), including the Limited Use requirements. The app uses this information only to provide the diary and sync features you see. It is not used for advertising, and it is not transferred to anyone else.
 
@@ -46,11 +46,11 @@ You can revoke the app's access at any time at [myaccount.google.com/permissions
 
 ## Sharing
 
-The only people who can see your diary are those who can open your Drive folder. If you share the folder with your partner, they can read and edit every post in it. Do not share the folder with anyone you do not want to read your diary.
+The only people who can see your diary are those who can open your Drive folder. If you share the folder with someone, they can read and edit every post in it. Do not share the folder with anyone you do not want to read your diary.
 
 ## Keeping and deleting your data
 
-- Your posts are kept until you delete them. Deleting a post in the app marks it as deleted in the shared folder so your partner's phone follows. To remove files completely, delete them in Google Drive.
+- Your posts are kept until you delete them. Deleting a post in the app marks it as deleted in the shared folder so the other phones follow. To remove files completely, delete them in Google Drive.
 - Uninstalling the app removes the copy on your phone. Files already in Drive stay there until you delete them.
 - You can sign out in the app's **Settings** and revoke access in your Google account.
 

@@ -238,7 +238,7 @@ class SyncEngine {
   Future<String> _ensureYearFolder(String year) async {
     var existing = _folders[year];
     if (existing != null && existing.isNotEmpty) return existing.first.id;
-    // Look again right before creating: the partner may just have made it.
+    // Look again right before creating: someone else may just have made it.
     await _loadFolders();
     existing = _folders[year];
     if (existing != null && existing.isNotEmpty) return existing.first.id;
@@ -424,7 +424,7 @@ class SyncEngine {
   }
 
   /// Deletes from Drive every media file of post [id] that this account owns and
-  /// forgets all its media records. Files owned by the partner are left to them.
+  /// forgets all its media records. Files owned by other people are left to them.
   Future<void> _deleteOwnedMedia(String id) async {
     final names = [
       for (final k in _files.keys)
@@ -489,7 +489,7 @@ class SyncEngine {
     }
     final year = entry.year;
 
-    // ---- media first, so the partner never sees a post whose photo is missing
+    // ---- media first, so nobody sees a post whose photo is missing
     var mediaOk = true;
     for (final name in entry.media) {
       if (!_safeName(name) || _rec(name) != null) continue;
@@ -504,7 +504,7 @@ class SyncEngine {
     }
     if (!mediaOk) return false;
 
-    // ---- has the partner changed the post since we last saw it?
+    // ---- has someone else changed the post since we last saw it?
     final mdName = entry.fileName;
     var rec = _rec(mdName);
     DriveFile? meta;

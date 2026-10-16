@@ -10,7 +10,7 @@ import '../config.dart';
 /// Google Sign-In (google_sign_in v7) plus a ready-to-use [DriveApi].
 ///
 /// Full Drive scope is needed: the narrower `drive.file` scope cannot see files
-/// the partner created in the shared folder.
+/// other people created in the shared folder.
 ///
 /// No method throws. Problems are kept in [error] (null when everything is fine);
 /// the user pressing "cancel" is not an error.

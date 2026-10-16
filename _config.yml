@@ -1,0 +1,13 @@
+title: Open Timeline
+description: A private diary for two
+theme: jekyll-theme-midnight
+exclude:
+  - android
+  - lib
+  - test
+  - tool
+  - design
+  - build
+  - pubspec.yaml
+  - pubspec.lock
+  - analysis_options.yaml

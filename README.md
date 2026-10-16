@@ -20,7 +20,7 @@
 - **No server and no account with us.** The app talks directly to Google Drive. There is no analytics, advertising or tracking.
 - **Your data stays readable.** Posts are ordinary Markdown files and photos sit beside them, so you can read the diary without the app.
 
-Android only. Open Timeline is a sideloaded app, not on the Play Store: download the APK from [Releases](../../releases).
+Android only. Open Timeline is a sideloaded app, not on the Play Store: download the APK from [Releases](https://github.com/YosYohannes/open-timeline/releases).
 
 ## Using it with a partner
 

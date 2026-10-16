@@ -1,6 +1,10 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_marker_cluster/flutter_map_marker_cluster.dart';
+import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 
 import '../../models/entry.dart';
@@ -12,6 +16,7 @@ import '../widgets/author.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
 import '../widgets/osm_map.dart';
+import '../widgets/snack.dart';
 import 'filters.dart';
 
 const _defaultCenter = LatLng(30, 10);
@@ -31,6 +36,9 @@ class _MapPageState extends State<MapPage> {
   final _controller = MapController();
   late final JournalStore _store;
   bool _ready = false;
+  bool _locating = false;
+  bool _autoLocated = false;
+  LatLng? _me;
   String? _lastSignature;
   RangeValues? _drag;
   Widget? _built;
@@ -55,6 +63,52 @@ class _MapPageState extends State<MapPage> {
 
   void _onChange() {
     if (widget.active && mounted) setState(() {});
+  }
+
+  Future<void> _locate({bool quiet = false}) async {
+    if (_locating) return;
+    setState(() => _locating = true);
+    try {
+      if (!await Geolocator.isLocationServiceEnabled()) {
+        if (!quiet) _say('Turn on location services');
+        return;
+      }
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied && !quiet) {
+        permission = await Geolocator.requestPermission();
+      }
+      if (permission == LocationPermission.denied ||
+          permission == LocationPermission.deniedForever) {
+        if (!quiet) {
+          _say(
+            permission == LocationPermission.deniedForever
+                ? 'Allow location for this app in the phone settings'
+                : 'Location permission was not granted',
+          );
+        }
+        return;
+      }
+      final pos = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.medium,
+          timeLimit: Duration(seconds: 15),
+        ),
+      );
+      if (!mounted) return;
+      final here = LatLng(pos.latitude, pos.longitude);
+      setState(() => _me = here);
+      _controller.move(here, math.max(_controller.camera.zoom, 14));
+    } on TimeoutException {
+      if (!quiet) _say('Could not get your location in time');
+    } catch (_) {
+      if (!quiet) _say('Could not get your location');
+    } finally {
+      if (mounted) setState(() => _locating = false);
+    }
+  }
+
+  void _say(String message) {
+    if (mounted) showSnack(context, message);
   }
 
   void _fit(List<LatLng> pts) {
@@ -145,7 +199,13 @@ class _MapPageState extends State<MapPage> {
       interactionOptions: const InteractionOptions(
         flags: InteractiveFlag.all & ~InteractiveFlag.rotate,
       ),
-      onMapReady: () => _ready = true,
+      onMapReady: () {
+        _ready = true;
+        if (!_autoLocated && !_store.entries.any((e) => e.hasLocation)) {
+          _autoLocated = true;
+          _locate(quiet: true);
+        }
+      },
     );
 
     return Column(
@@ -158,6 +218,26 @@ class _MapPageState extends State<MapPage> {
                 options: options,
                 children: [
                   osmTileLayer(),
+                  if (_me != null)
+                    MarkerLayer(
+                      markers: [
+                        Marker(
+                          point: _me!,
+                          width: 26,
+                          height: 26,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: const Color(0xFF4A4A4A),
+                                width: 6,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   MarkerClusterLayerWidget(
                     options: MarkerClusterLayerOptions(
                       maxClusterRadius: 60,
@@ -203,10 +283,26 @@ class _MapPageState extends State<MapPage> {
               Positioned(
                 top: 4,
                 right: 8,
-                child: IconButton.filledTonal(
-                  tooltip: 'Fit to posts',
-                  icon: const Icon(Icons.center_focus_strong_outlined),
-                  onPressed: pts.isEmpty ? null : () => _fit(pts),
+                child: Column(
+                  children: [
+                    IconButton.filledTonal(
+                      tooltip: 'Fit to posts',
+                      icon: const Icon(Icons.center_focus_strong_outlined),
+                      onPressed: pts.isEmpty ? null : () => _fit(pts),
+                    ),
+                    const SizedBox(height: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'My location',
+                      icon: _locating
+                          ? const SizedBox(
+                              width: 18,
+                              height: 18,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            )
+                          : const Icon(Icons.my_location),
+                      onPressed: _locating ? null : _locate,
+                    ),
+                  ],
                 ),
               ),
             ],

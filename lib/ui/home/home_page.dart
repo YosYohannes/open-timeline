@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 
+import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
+import '../../sync/sync_service.dart';
 import '../app/app_title.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
@@ -13,9 +15,10 @@ import 'map_page.dart';
 import 'timeline_page.dart';
 
 class HomePage extends StatefulWidget {
-  const HomePage({super.key, required this.auth});
+  const HomePage({super.key, required this.auth, required this.sync});
 
   final AuthService auth;
+  final SyncService sync;
 
   @override
   State<HomePage> createState() => _HomePageState();
@@ -80,13 +83,108 @@ class _HomePageState extends State<HomePage> {
 
   void _openSettings() {
     Navigator.of(context).push(
-      MaterialPageRoute<void>(builder: (_) => SettingsPage(auth: widget.auth)),
+      MaterialPageRoute<void>(
+        builder: (_) => SettingsPage(auth: widget.auth, sync: widget.sync),
+      ),
+    );
+  }
+
+  Future<void> _runSync() async {
+    final store = StoreScope.read(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final r = await widget.sync.sync();
+    if (!mounted) return;
+    messenger.hideCurrentSnackBar();
+    if (r.ok) {
+      final conflicts = r.conflicts > 0
+          ? ' · ${r.conflicts} conflict(s) – look for ⚠'
+          : '';
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text('Synced · ↑${r.uploaded} ↓${r.downloaded}$conflicts'),
+        ),
+      );
+      return;
+    }
+    final needsSettings =
+        !widget.auth.configured ||
+        !widget.auth.signedIn ||
+        (store.settings.driveFolderId ?? '').trim().isEmpty;
+    messenger.showSnackBar(
+      SnackBar(
+        content: Text(r.errors.first),
+        duration: const Duration(seconds: 10),
+        action: needsSettings
+            ? SnackBarAction(label: 'Settings', onPressed: _openSettings)
+            : SnackBarAction(
+                label: 'Details',
+                onPressed: () => _showSyncErrors(r.errors),
+              ),
+      ),
+    );
+  }
+
+  void _showSyncErrors(List<String> errors) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Sync problems'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              for (final e in errors)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 8),
+                  child: SelectableText('• $e'),
+                ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _syncButton(ThemeData theme, JournalStore store) {
+    return ListenableBuilder(
+      listenable: widget.sync,
+      builder: (context, _) {
+        if (widget.sync.running) {
+          return const IconButton(
+            tooltip: 'Syncing…',
+            onPressed: null,
+            icon: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2.5),
+            ),
+          );
+        }
+        return IconButton(
+          tooltip: 'Sync',
+          icon: Badge(
+            smallSize: 8,
+            backgroundColor: theme.colorScheme.primary,
+            isLabelVisible: store.dirtyCount > 0,
+            child: const Icon(Icons.sync),
+          ),
+          onPressed: _runSync,
+        );
+      },
     );
   }
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final store = StoreScope.of(context);
 
     return Scaffold(
       appBar: AppBar(
@@ -138,6 +236,7 @@ class _HomePageState extends State<HomePage> {
             tooltip: 'Filters',
             onPressed: () => showFilterSheet(context, _filter),
           ),
+          _syncButton(theme, store),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
             tooltip: 'Settings',

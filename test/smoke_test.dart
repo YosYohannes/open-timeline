@@ -5,6 +5,7 @@ import 'package:open_timeline/main.dart';
 import 'package:open_timeline/store/journal_store.dart';
 import 'package:open_timeline/ui/app/app_title.dart';
 import 'package:open_timeline/sync/google_auth.dart';
+import 'package:open_timeline/sync/sync_service.dart';
 
 void main() {
   testWidgets('app builds and shows the empty Timeline', (
@@ -20,11 +21,9 @@ void main() {
       await store.updateSettings(AppSettings(me: 'me@example.com'));
     });
 
+    final auth = AuthService(webClientId: '');
     await tester.pumpWidget(
-      OpenTimelineApp(
-        store: store,
-        auth: AuthService(webClientId: ''),
-      ),
+      OpenTimelineApp(store: store, auth: auth, sync: SyncService(store, auth)),
     );
     await tester.pumpAndSettle();
 

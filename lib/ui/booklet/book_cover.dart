@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../models/booklet.dart';
-import 'cover_theme.dart';
+import 'flag_spine.dart';
 
 class BookCover extends StatelessWidget {
   const BookCover({super.key, required this.booklet, this.compact = false});
@@ -9,30 +9,8 @@ class BookCover extends StatelessWidget {
   final Booklet booklet;
   final bool compact;
 
-  static String _month(DateTime d) => const [
-    'Jan',
-    'Feb',
-    'Mar',
-    'Apr',
-    'May',
-    'Jun',
-    'Jul',
-    'Aug',
-    'Sep',
-    'Oct',
-    'Nov',
-    'Dec',
-  ][d.month - 1];
-
-  String get _span {
-    final a = '${_month(booklet.first)} ${booklet.first.year}';
-    final z = '${_month(booklet.last)} ${booklet.last.year}';
-    return a == z ? a : '$a – $z';
-  }
-
   @override
   Widget build(BuildContext context) {
-    final theme = coverThemeFor(booklet.country);
     final count = booklet.count;
     return LayoutBuilder(
       builder: (context, box) {
@@ -40,13 +18,13 @@ class BookCover extends StatelessWidget {
         final s = (w / 340).clamp(0.5, 1.2);
         final bandWidth = w * 0.16;
         final small = TextStyle(
-          color: theme.ink.withValues(alpha: 0.85),
+          color: kCoverInk.withValues(alpha: 0.85),
           fontSize: 12 * s,
           letterSpacing: 0.6,
         );
         return DecoratedBox(
           decoration: BoxDecoration(
-            color: theme.paper,
+            color: kCoverPaper,
             borderRadius: BorderRadius.horizontal(
               left: Radius.circular(compact ? 3 : 0),
               right: const Radius.circular(5),
@@ -59,14 +37,7 @@ class BookCover extends StatelessWidget {
                 top: 0,
                 bottom: 0,
                 width: bandWidth,
-                child: Column(
-                  children: [
-                    for (final c in theme.band)
-                      Expanded(
-                        child: SizedBox.expand(child: ColoredBox(color: c)),
-                      ),
-                  ],
-                ),
+                child: FlagSpine(country: booklet.country),
               ),
               Positioned(
                 left: bandWidth,
@@ -96,7 +67,7 @@ class BookCover extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          color: theme.ink,
+                          color: kCoverInk,
                           fontSize: 22 * s,
                           letterSpacing: 3 * s,
                           height: 1.2,
@@ -107,7 +78,7 @@ class BookCover extends StatelessWidget {
                       Container(
                         width: 34 * s,
                         height: 1.5,
-                        color: theme.ink.withValues(alpha: 0.6),
+                        color: kCoverInk.withValues(alpha: 0.6),
                       ),
                       const Spacer(),
                       Text(
@@ -116,14 +87,12 @@ class BookCover extends StatelessWidget {
                       ),
                       Text('${booklet.sections.length} series', style: small),
                       if (!compact) ...[
-                        SizedBox(height: 4 * s),
-                        Text(_span, style: small.copyWith(fontSize: 11 * s)),
                         SizedBox(height: 18 * s),
                         Text(
                           'Swipe to turn the page',
                           style: small.copyWith(
                             fontSize: 10 * s,
-                            color: theme.ink.withValues(alpha: 0.5),
+                            color: kCoverInk.withValues(alpha: 0.5),
                           ),
                         ),
                       ],

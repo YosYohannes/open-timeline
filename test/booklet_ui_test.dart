@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:open_timeline/models/entry.dart';
 import 'package:open_timeline/store/journal_store.dart';
 import 'package:open_timeline/ui/app/store_scope.dart';
+import 'package:open_timeline/ui/booklet/book_pager.dart';
 import 'package:open_timeline/ui/booklet/collection_page.dart';
 import 'package:open_timeline/ui/booklet/stamp_print.dart';
 
@@ -98,7 +99,16 @@ void main() {
     expect(find.text('No stamps yet'), findsOneWidget);
   });
 
-  testWidgets('a booklet opens on its cover, and bookmarks jump to a series', (
+  Future<void> turn(WidgetTester tester, {bool forward = true}) async {
+    await tester.flingFrom(
+      tester.getCenter(find.byType(BookPager)),
+      Offset(forward ? -300 : 300, 0),
+      1200,
+    );
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('a booklet opens on its cover, then a contents page', (
     tester,
   ) async {
     await open(tester);
@@ -106,47 +116,68 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('🇯🇵 Japan'), findsOneWidget);
     expect(find.text('Swipe to turn the page'), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-0')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-1')), findsOneWidget);
-    expect(find.byKey(const ValueKey('tab-2')), findsNothing);
 
-    await tester.tap(find.byKey(const ValueKey('tab-1')));
-    await pumpUntil(tester, () => find.text('METRO').evaluate().isNotEmpty);
-    await tester.pumpAndSettle();
-    expect(find.text('METRO'), findsOneWidget);
-    expect(find.byType(StampPrint), findsNWidgets(2));
-    expect(find.text('Swipe to turn the page'), findsNothing);
+    await turn(tester);
+    expect(find.text('CONTENTS'), findsOneWidget);
+    expect(find.byKey(const ValueKey('contents-0')), findsOneWidget);
+    expect(find.byKey(const ValueKey('contents-1')), findsOneWidget);
+    expect(find.byKey(const ValueKey('contents-2')), findsNothing);
+    expect(find.text('JR West'), findsOneWidget);
+    expect(find.text('3 stamps'), findsOneWidget);
+    expect(find.text('Metro'), findsOneWidget);
+    expect(find.text('2 stamps'), findsOneWidget);
   });
 
   testWidgets(
-    'swiping turns the page and the first series page shows its stamps',
+    'a contents line jumps to its series and the page number comes back',
     (tester) async {
       await open(tester);
       await tester.tap(find.byKey(const ValueKey('booklet-JP')));
       await tester.pumpAndSettle();
-      await tester.fling(
-        find.byType(StampPrint).evaluate().isEmpty
-            ? find.text('Swipe to turn the page')
-            : find.byType(StampPrint).first,
-        const Offset(-300, 0),
-        1200,
+      await turn(tester);
+
+      await tester.tap(find.byKey(const ValueKey('contents-1')));
+      await pumpUntil(tester, () => find.text('METRO').evaluate().isNotEmpty);
+      await tester.pumpAndSettle();
+      expect(find.text('METRO'), findsOneWidget);
+      expect(find.byType(StampPrint), findsNWidgets(2));
+
+      final number = find.descendant(
+        of: find.byType(InkWell),
+        matching: find.textContaining(RegExp(r'^\d+$')),
+      );
+      await tester.tap(number.last);
+      await pumpUntil(
+        tester,
+        () => find.text('CONTENTS').evaluate().isNotEmpty,
       );
       await tester.pumpAndSettle();
-      expect(find.text('JR WEST'), findsOneWidget);
-      final onPage = find.byType(StampPrint).evaluate().length;
-      expect(onPage, inInclusiveRange(1, 3));
-
-      await tester.fling(find.text('JR WEST'), const Offset(300, 0), 1200);
-      await tester.pumpAndSettle();
-      expect(find.text('Swipe to turn the page'), findsOneWidget);
+      expect(find.text('CONTENTS'), findsOneWidget);
     },
   );
+
+  testWidgets('swiping turns past the contents to the first series', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.byKey(const ValueKey('booklet-JP')));
+    await tester.pumpAndSettle();
+    await turn(tester);
+    await turn(tester);
+    expect(find.text('JR WEST'), findsOneWidget);
+    final onPage = find.byType(StampPrint).evaluate().length;
+    expect(onPage, inInclusiveRange(1, 3));
+
+    await turn(tester, forward: false);
+    expect(find.text('CONTENTS'), findsOneWidget);
+  });
 
   testWidgets('tapping a stamp on a page opens it', (tester) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('booklet-TW')));
     await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('tab-0')));
+    await turn(tester);
+    await tester.tap(find.byKey(const ValueKey('contents-0')));
     await pumpUntil(
       tester,
       () => find.byType(StampPrint).evaluate().isNotEmpty,
@@ -154,5 +185,18 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.byType(StampPrint), findsOneWidget);
     expect(find.textContaining('Place 6'), findsOneWidget);
+  });
+
+  testWidgets('one swipe turns one page, however long or fast', (tester) async {
+    await open(tester);
+    await tester.tap(find.byKey(const ValueKey('booklet-JP')));
+    await tester.pumpAndSettle();
+    await tester.flingFrom(
+      tester.getCenter(find.byType(BookPager)),
+      const Offset(-900, 0),
+      5000,
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('CONTENTS'), findsOneWidget);
   });
 }

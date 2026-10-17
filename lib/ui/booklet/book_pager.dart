@@ -33,6 +33,8 @@ class _BookPagerState extends State<BookPager>
 
   int get _last => math.max(0, widget.pages.length - 1);
 
+  int _dragFrom = 0;
+
   @override
   void initState() {
     super.initState();
@@ -65,15 +67,26 @@ class _BookPagerState extends State<BookPager>
     );
   }
 
+  void _dragStart(DragStartDetails d) {
+    _anim.stop();
+    _dragFrom = _anim.value.round();
+  }
+
+  void _dragUpdate(DragUpdateDetails d, double width) {
+    final lo = math.max(0, _dragFrom - 1).toDouble();
+    final hi = math.min(_last, _dragFrom + 1).toDouble();
+    _anim.value = (_anim.value - d.delta.dx / width * 1.4).clamp(lo, hi);
+  }
+
   void _dragEnd(DragEndDetails d) {
     final v = d.primaryVelocity ?? 0;
     var target = _anim.value.round();
     if (v < -350) {
-      target = _anim.value.floor() + 1;
+      target = _dragFrom + 1;
     } else if (v > 350) {
-      target = _anim.value.ceil() - 1;
+      target = _dragFrom - 1;
     }
-    _goTo(target);
+    _goTo(target.clamp(_dragFrom - 1, _dragFrom + 1));
   }
 
   Widget _turning(Widget page, double frac) {
@@ -113,12 +126,8 @@ class _BookPagerState extends State<BookPager>
         final width = math.max(1.0, box.maxWidth);
         return GestureDetector(
           behavior: HitTestBehavior.translucent,
-          onHorizontalDragStart: (_) => _anim.stop(),
-          onHorizontalDragUpdate: (d) =>
-              _anim.value = (_anim.value - d.delta.dx / width * 1.4).clamp(
-                0.0,
-                _last.toDouble(),
-              ),
+          onHorizontalDragStart: _dragStart,
+          onHorizontalDragUpdate: (d) => _dragUpdate(d, width),
           onHorizontalDragEnd: _dragEnd,
           child: AnimatedBuilder(
             animation: _anim,

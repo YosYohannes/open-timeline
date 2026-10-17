@@ -11,17 +11,8 @@ import 'collage_layout.dart';
 import 'stamp_image.dart';
 import 'stamp_print.dart';
 
-const _tabColors = [
-  Color(0xFFE0795F),
-  Color(0xFF8FB5A0),
-  Color(0xFFE3C26A),
-  Color(0xFF9BA7D6),
-  Color(0xFFD69BB5),
-  Color(0xFFB5A07A),
-];
-
 const kBookRatio = 0.70710678;
-const _tabHeight = 30.0;
+const _contentsPage = 1;
 const _pageInset = 16.0;
 const _headerHeight = 26.0;
 const _footerHeight = 22.0;
@@ -36,15 +27,10 @@ class BookletPage extends StatefulWidget {
 }
 
 class _PageSpec {
-  _PageSpec({
-    required this.section,
-    required this.placed,
-    required this.number,
-  });
+  _PageSpec({required this.section, required this.placed});
 
   final int section;
   final List<Placed> placed;
-  final int number;
 }
 
 class _BookletPageState extends State<BookletPage> {
@@ -67,25 +53,7 @@ class _BookletPageState extends State<BookletPage> {
         ? 'Unsorted'
         : countryLabel(widget.country!);
     return Scaffold(
-      appBar: AppBar(
-        title: Text(title),
-        actions: [
-          ListenableBuilder(
-            listenable: _book,
-            builder: (context, _) => Padding(
-              padding: const EdgeInsets.only(right: 16),
-              child: Center(
-                child: Text(
-                  booklet == null
-                      ? ''
-                      : (_book.page == 0 ? 'Cover' : 'Page ${_book.page}'),
-                  style: Theme.of(context).textTheme.bodySmall,
-                ),
-              ),
-            ),
-          ),
-        ],
-      ),
+      appBar: AppBar(title: Text(title)),
       body: booklet == null
           ? const Center(child: Text('This booklet is empty'))
           : Padding(
@@ -100,15 +68,12 @@ class _BookletPageState extends State<BookletPage> {
 
   Widget _buildBook(BuildContext context, Booklet booklet, Size size) {
     final store = StoreScope.read(context);
-    final room = size.height - _tabHeight;
     var bookWidth = size.width;
     var bookHeight = bookWidth / kBookRatio;
-    if (bookHeight > room) {
-      bookHeight = room;
+    if (bookHeight > size.height) {
+      bookHeight = size.height;
       bookWidth = bookHeight * kBookRatio;
     }
-    final left = (size.width - bookWidth) / 2;
-    final top = _tabHeight + (room - bookHeight) / 2;
     final area = Size(
       bookWidth - _pageInset * 2,
       bookHeight - _pageInset * 2 - _headerHeight - _footerHeight,
@@ -116,78 +81,59 @@ class _BookletPageState extends State<BookletPage> {
     final specs = <_PageSpec>[];
     final starts = <int>[];
     for (var s = 0; s < booklet.sections.length; s++) {
-      final stamps = booklet.sections[s].stamps;
       final items = [
-        for (final e in stamps)
+        for (final e in booklet.sections[s].stamps)
           CollageItem(id: e.id, ratio: _ratioOf(store, e), size: e.size),
       ];
-      starts.add(specs.length + 1);
-      final pages = layoutCollage(items, area);
-      for (var p = 0; p < pages.length; p++) {
-        specs.add(_PageSpec(section: s, placed: pages[p], number: p + 1));
+      starts.add(_contentsPage + 1 + specs.length);
+      for (final page in layoutCollage(items, area)) {
+        specs.add(_PageSpec(section: s, placed: page));
       }
     }
     final byId = {for (final e in booklet.stamps) e.id: e};
+    String seriesName(int s) => booklet.sections[s].series.isEmpty
+        ? 'Other'
+        : booklet.sections[s].series;
+    void toContents() => _book.goTo(_contentsPage);
 
     final pages = <Widget>[
       BookCover(booklet: booklet),
+      _Paper(
+        title: 'Contents',
+        number: _contentsPage,
+        child: _Contents(
+          rows: [
+            for (var s = 0; s < booklet.sections.length; s++)
+              (
+                name: seriesName(s),
+                count: booklet.sections[s].stamps.length,
+                page: starts[s],
+              ),
+          ],
+          onOpen: _book.goTo,
+        ),
+      ),
       for (var i = 0; i < specs.length; i++)
         _Paper(
-          title: booklet.sections[specs[i].section].series.isEmpty
-              ? 'Other'
-              : booklet.sections[specs[i].section].series,
-          number: i + 1,
-          total: specs.length,
-          children: [
-            for (final p in specs[i].placed)
-              if (byId[p.id] != null) StampPrint(entry: byId[p.id]!, placed: p),
-          ],
+          title: seriesName(specs[i].section),
+          number: _contentsPage + 1 + i,
+          onNumberTap: toContents,
+          child: Stack(
+            children: [
+              for (final p in specs[i].placed)
+                if (byId[p.id] != null)
+                  StampPrint(entry: byId[p.id]!, placed: p),
+            ],
+          ),
         ),
     ];
 
-    return Stack(
-      children: [
-        Positioned(
-          left: left,
-          top: top,
-          width: bookWidth,
-          height: bookHeight,
-          child: BookPager(pages: pages, controller: _book),
-        ),
-        Positioned(
-          left: left,
-          top: top - _tabHeight,
-          width: bookWidth,
-          height: _tabHeight,
-          child: ListenableBuilder(
-            listenable: _book,
-            builder: (context, _) {
-              final page = _book.page;
-              return SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                padding: const EdgeInsets.only(left: 18),
-                child: Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    for (var s = 0; s < booklet.sections.length; s++)
-                      _Tab(
-                        key: ValueKey('tab-$s'),
-                        label: booklet.sections[s].series.isEmpty
-                            ? 'Other'
-                            : booklet.sections[s].series,
-                        color: _tabColors[s % _tabColors.length],
-                        selected:
-                            page >= starts[s] &&
-                            (s + 1 >= starts.length || page < starts[s + 1]),
-                        onTap: () => _book.goTo(starts[s]),
-                      ),
-                  ],
-                ),
-              );
-            },
-          ),
-        ),
-      ],
+    return Center(
+      child: SizedBox(
+        width: bookWidth,
+        height: bookHeight,
+        child: BookPager(pages: pages, controller: _book),
+      ),
     );
   }
 
@@ -198,63 +144,96 @@ class _BookletPageState extends State<BookletPage> {
   }
 }
 
-class _Tab extends StatelessWidget {
-  const _Tab({
-    super.key,
-    required this.label,
-    required this.color,
-    required this.selected,
-    required this.onTap,
-  });
+class _Contents extends StatelessWidget {
+  const _Contents({required this.rows, required this.onOpen});
 
-  final String label;
-  final Color color;
-  final bool selected;
-  final VoidCallback onTap;
+  final List<({String name, int count, int page})> rows;
+  final ValueChanged<int> onOpen;
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(right: 4),
-      child: InkWell(
-        onTap: onTap,
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 140),
-          height: selected ? _tabHeight : _tabHeight - 6,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: color,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-          ),
-          child: Text(
-            label,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(
-              color: Color(0xFF111111),
-              fontSize: 11,
-              fontWeight: FontWeight.w600,
+    return ListView(
+      padding: const EdgeInsets.only(top: 18),
+      children: [
+        for (var i = 0; i < rows.length; i++)
+          InkWell(
+            key: ValueKey('contents-$i'),
+            onTap: () => onOpen(rows[i].page),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 10),
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 190),
+                    child: Text(
+                      rows[i].name,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Color(0xFF3D372B),
+                        fontSize: 16,
+                        fontFamily: 'serif',
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    rows[i].count == 1 ? '1 stamp' : '${rows[i].count} stamps',
+                    style: const TextStyle(color: kInkBrown, fontSize: 10),
+                  ),
+                  const Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.fromLTRB(8, 0, 8, 4),
+                      child: CustomPaint(
+                        size: Size(double.infinity, 2),
+                        painter: _Dots(),
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${rows[i].page}',
+                    style: const TextStyle(
+                      color: Color(0xFF3D372B),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+              ),
             ),
           ),
-        ),
-      ),
+      ],
     );
   }
+}
+
+class _Dots extends CustomPainter {
+  const _Dots();
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()..color = const Color(0xFFB9AE95);
+    for (var x = 0.0; x < size.width; x += 5) {
+      canvas.drawCircle(Offset(x + 1, size.height / 2), 0.9, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(_Dots old) => false;
 }
 
 class _Paper extends StatelessWidget {
   const _Paper({
     required this.title,
     required this.number,
-    required this.total,
-    required this.children,
+    required this.child,
+    this.onNumberTap,
   });
 
   final String title;
   final int number;
-  final int total;
-  final List<Widget> children;
+  final Widget child;
+  final VoidCallback? onNumberTap;
 
   @override
   Widget build(BuildContext context) {
@@ -309,13 +288,23 @@ class _Paper extends StatelessWidget {
                     ),
                   ),
                 ),
-                Expanded(child: Stack(children: children)),
+                Expanded(child: child),
                 SizedBox(
                   height: _footerHeight,
                   child: Center(
-                    child: Text(
-                      '$number',
-                      style: const TextStyle(color: kInkBrown, fontSize: 11),
+                    child: InkWell(
+                      key: ValueKey('page-number-$number'),
+                      onTap: onNumberTap,
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text(
+                          '$number',
+                          style: const TextStyle(
+                            color: kInkBrown,
+                            fontSize: 11,
+                          ),
+                        ),
+                      ),
                     ),
                   ),
                 ),

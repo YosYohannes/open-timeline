@@ -6,6 +6,7 @@ import 'package:image_picker/image_picker.dart';
 
 import '../../models/entry.dart';
 import '../app/store_scope.dart';
+import '../booklet/stamp_image.dart';
 import '../post/post_page.dart';
 import '../widgets/snack.dart';
 import 'crop_page.dart';
@@ -139,10 +140,14 @@ Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
       } finally {
         await _discard(crop);
       }
+      final paper = await paperColorOf(store.mediaFile(base, name));
       final filed = await navigator.push<bool>(
         MaterialPageRoute<bool>(
           builder: (_) => PostPage(
-            entry: base.copyWith(media: [name]),
+            entry: base.copyWith(
+              media: [name],
+              blend: paper != null && isLightPaper(paper),
+            ),
             isNew: true,
             scanner: scanner,
           ),

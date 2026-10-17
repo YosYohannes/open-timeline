@@ -100,6 +100,7 @@ void main() {
     await tester.tap(find.text('Open'));
     await tester.pumpAndSettle();
     expect(find.byType(PostPage), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const ValueKey('location-row')));
     await tester.tap(find.byKey(const ValueKey('location-row')));
     await tester.pumpAndSettle();
   }

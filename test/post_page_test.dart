@@ -12,6 +12,7 @@ import 'package:open_timeline/ui/app/store_scope.dart';
 import 'package:open_timeline/ui/widgets/media_tile.dart';
 
 import 'map_test_support.dart';
+import 'pump_support.dart';
 
 const _id = '20261016-143205-k3f9';
 const _photo = '${_id}_ab12.jpg';
@@ -101,16 +102,7 @@ void main() {
 
   Future<void> tapSave(WidgetTester tester) async {
     await tester.runAsync(() => tester.tap(saveButton()));
-    for (
-      var i = 0;
-      i < 100 && find.byType(PostPage).evaluate().isNotEmpty;
-      i++
-    ) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
-    }
+    await pumpUntil(tester, () => find.byType(PostPage).evaluate().isEmpty);
     await tester.pumpAndSettle();
   }
 

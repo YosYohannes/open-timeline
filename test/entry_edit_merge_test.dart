@@ -9,6 +9,8 @@ import 'package:open_timeline/ui/post/post_page.dart';
 
 import 'map_test_support.dart';
 
+import 'pump_support.dart';
+
 const _id = '20261016-143205-k3f9';
 const _mergedSnack = 'Merged with changes synced while you were editing';
 
@@ -82,16 +84,7 @@ void main() {
 
   Future<void> save(WidgetTester tester) async {
     await tester.runAsync(() => tester.tap(find.text('Save')));
-    for (
-      var i = 0;
-      i < 100 && find.byType(PostPage).evaluate().isNotEmpty;
-      i++
-    ) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
-    }
+    await pumpUntil(tester, () => find.byType(PostPage).evaluate().isEmpty);
     await tester.pumpAndSettle();
     expect(find.byType(PostPage), findsNothing);
   }

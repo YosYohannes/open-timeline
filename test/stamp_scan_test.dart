@@ -11,6 +11,7 @@ import 'package:open_timeline/ui/stamp/crop_page.dart';
 import 'package:open_timeline/ui/stamp/stamp_scan.dart';
 
 import 'map_test_support.dart';
+import 'pump_support.dart';
 
 final _png = base64Decode(
   'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
@@ -79,29 +80,30 @@ void main() {
       ),
     );
     await tester.runAsync(() => tester.tap(find.text('Scan')));
-    for (var i = 0; i < 30; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
-    }
+    await pumpUntil(
+      tester,
+      () => cropReady(tester) || find.byType(AlertDialog).evaluate().isNotEmpty,
+      maxRounds: settle ? 400 : 20,
+    );
     if (settle) await tester.pumpAndSettle();
   }
 
-  Future<void> settleReal(WidgetTester tester, {int rounds = 30}) async {
-    for (var i = 0; i < rounds; i++) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 50)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
+  Future<void> settleReal(
+    WidgetTester tester, {
+    int rounds = 400,
+    bool Function()? until,
+  }) async {
+    await pumpUntil(tester, until ?? () => false, maxRounds: rounds);
+    await tester.pump(const Duration(seconds: 1));
   }
 
+  bool shows(String text) => find.text(text).evaluate().isNotEmpty;
+
   Future<void> useCrop(WidgetTester tester) async {
+    await pumpUntil(tester, () => cropReady(tester));
     expect(find.text('Use crop'), findsOneWidget);
     await tester.runAsync(() => tester.tap(find.text('Use crop')));
-    await settleReal(tester);
+    await settleReal(tester, until: () => shows('New stamp'));
   }
 
   Finder field(String hint) => find.byWidgetPredicate(
@@ -144,17 +146,7 @@ void main() {
     await tester.runAsync(
       () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
     );
-    for (
-      var i = 0;
-      i < 60 && find.byType(PostPage).evaluate().isNotEmpty;
-      i++
-    ) {
-      await tester.runAsync(
-        () => Future<void>.delayed(const Duration(milliseconds: 100)),
-      );
-      await tester.pump();
-    }
-    await tester.pumpAndSettle();
+    await settleReal(tester, until: () => shows('Crop another stamp'));
 
     final saved = store.entries.single;
     expect(saved.isStamp, isTrue);
@@ -172,7 +164,10 @@ void main() {
       findsOneWidget,
     );
     await tester.runAsync(() => tester.tap(find.text('Done')));
-    await settleReal(tester, rounds: 10);
+    await settleReal(
+      tester,
+      until: () => find.byType(CropPage).evaluate().isEmpty,
+    );
     expect(find.byType(CropPage), findsNothing);
     expect(scanner.scanned.single.existsSync(), isFalse);
   });
@@ -191,7 +186,7 @@ void main() {
       await tester.runAsync(
         () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
       );
-      await settleReal(tester, rounds: 40);
+      await settleReal(tester, until: () => shows('Crop another stamp'));
     }
     expect(store.entries.map((e) => e.series).toSet(), {
       'series 1',
@@ -209,7 +204,10 @@ void main() {
     late FakeScanner scanner;
     await open(tester, (d) => scanner = FakeScanner(d));
     await tester.runAsync(() => tester.tap(find.text('Cancel')));
-    await settleReal(tester, rounds: 10);
+    await settleReal(
+      tester,
+      until: () => find.byType(CropPage).evaluate().isEmpty,
+    );
     expect(find.byType(CropPage), findsNothing);
     expect(store.entries, isEmpty);
     expect(scanner.scanned.single.existsSync(), isFalse);
@@ -231,7 +229,7 @@ void main() {
     await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
     await tester.runAsync(() => tester.tap(find.text('Discard')));
-    await settleReal(tester, rounds: 10);
+    await settleReal(tester, until: () => shows('Crop the stamp'));
     expect(find.byType(PostPage), findsNothing);
     expect(year.listSync().where((f) => f.path.endsWith('.png')), isEmpty);
     expect(find.text('Crop the stamp'), findsOneWidget);
@@ -260,13 +258,7 @@ void main() {
       expect(find.textContaining('no module'), findsOneWidget);
 
       await tester.runAsync(() => tester.tap(find.text('Gallery')));
-      for (var i = 0; i < 30; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
-      await tester.pumpAndSettle();
+      await settleReal(tester, until: () => shows('Crop the stamp'));
       expect(scanner.picked, [false]);
       expect(find.text('Crop the stamp'), findsOneWidget);
       await useCrop(tester);

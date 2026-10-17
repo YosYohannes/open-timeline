@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
@@ -69,4 +70,22 @@ void main() {
       expect(find.textContaining('is available'), findsNothing);
     },
   );
+
+  testWidgets('Settings shows the installed version', (tester) async {
+    await pumpApp(tester, check: false);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('Version'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Version'), findsOneWidget);
+    expect(find.text('0.2.0'), findsOneWidget);
+  });
 }

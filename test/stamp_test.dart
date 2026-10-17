@@ -47,6 +47,30 @@ void main() {
       expect(entryToMarkdown(back), text);
     });
 
+    test(
+      'size and blend are written only when they differ from the default',
+      () {
+        final plain = entryToMarkdown(stamp());
+        expect(plain, isNot(contains('size:')));
+        expect(plain, isNot(contains('blend:')));
+        final fancy = entryToMarkdown(
+          stamp().copyWith(size: sizeLarge, blend: true),
+        );
+        expect(fancy, contains('size: "large"'));
+        expect(fancy, contains('blend: true'));
+        final back = entryFromMarkdown(fancy);
+        expect(back.size, sizeLarge);
+        expect(back.blend, isTrue);
+        expect(entryToMarkdown(back), fancy);
+      },
+    );
+
+    test('an unknown size reads as medium', () {
+      final text = entryToMarkdown(stamp().copyWith(size: sizeSmall))
+          .replaceFirst('"small"', '"huge"');
+      expect(entryFromMarkdown(text).size, sizeMedium);
+    });
+
     test('a normal post writes none of the stamp fields', () {
       final text = entryToMarkdown(
         Entry.create(author: 'a@x.com').copyWith(text: 'hi'),
@@ -77,6 +101,20 @@ void main() {
       expect(merged.country, 'JP');
       expect(merged.title, 'Kyoto');
       expect(merged.isStamp, isTrue);
+    });
+  });
+
+  group('merge size and blend', () {
+    test('each follows the side that changed it', () {
+      final base = stamp();
+      final merged = mergeEntry(
+        base: base,
+        local: base.copyWith(size: sizeLarge),
+        remote: base.copyWith(blend: true),
+        localUser: 'a@x.com',
+      );
+      expect(merged.size, sizeLarge);
+      expect(merged.blend, isTrue);
     });
   });
 

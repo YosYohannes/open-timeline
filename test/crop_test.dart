@@ -7,6 +7,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:open_timeline/ui/stamp/crop_page.dart';
 
+import 'pump_support.dart';
+
 void main() {
   const image = ui.Size(1000, 2000);
 
@@ -115,26 +117,10 @@ void main() {
       );
       await tester.tap(find.text('open'));
       await tester.pump(const Duration(milliseconds: 500));
-      for (var i = 0; i < 20 && find.text('Use crop').evaluate().isEmpty; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
-      for (var i = 0; i < 10; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
+      await pumpUntil(tester, () => cropReady(tester));
       await act();
       await tester.runAsync(() => tester.tap(find.text('Use crop')));
-      for (var i = 0; i < 30 && result == null; i++) {
-        await tester.runAsync(
-          () => Future<void>.delayed(const Duration(milliseconds: 50)),
-        );
-        await tester.pump();
-      }
+      await pumpUntil(tester, () => result != null);
       return result;
     }
 

@@ -17,6 +17,7 @@ import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../booklet/stamp_image.dart';
 import '../stamp/country_picker.dart';
 import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
@@ -66,6 +67,8 @@ class _PostPageState extends State<PostPage> {
   late List<String> _media;
   final _rev = ValueNotifier<int>(0);
   String? _countryCode;
+  late String _size;
+  late bool _blend;
 
   final List<String> _imported = [];
 
@@ -89,6 +92,8 @@ class _PostPageState extends State<PostPage> {
     _place = TextEditingController(text: e.place ?? '')..addListener(_changed);
     _series = TextEditingController(text: e.series)..addListener(_changed);
     _countryCode = e.country;
+    _size = e.size;
+    _blend = e.blend;
     _tagInput.addListener(_changed);
     _tagFocus.addListener(_changed);
     _tags = [...e.tags];
@@ -134,6 +139,8 @@ class _PostPageState extends State<PostPage> {
         _place.text.trim() != (o.place ?? '').trim() ||
         _series.text.trim() != o.series ||
         _countryCode != o.country ||
+        _size != o.size ||
+        _blend != o.blend ||
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
@@ -156,6 +163,8 @@ class _PostPageState extends State<PostPage> {
       place: place.isEmpty ? null : place,
       series: _series.text.trim(),
       country: _countryCode,
+      size: _size,
+      blend: _blend,
       color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
@@ -393,7 +402,13 @@ class _PostPageState extends State<PostPage> {
         final name = await _store.importMedia(_original, cropped);
         final old = _media.toList();
         _imported.add(name);
-        if (mounted) setState(() => _media = [name]);
+        final paper = await paperColorOf(_store.mediaFile(_original, name));
+        if (mounted) {
+          setState(() {
+            _media = [name];
+            _blend = paper != null && isLightPaper(paper);
+          });
+        }
         _deleteFiles(old.where(_imported.contains));
       } finally {
         try {
@@ -1087,27 +1102,42 @@ class _PostPageState extends State<PostPage> {
 
   Widget _stampPreview(ThemeData theme) {
     final name = _media.firstOrNull;
+    final file = name == null ? null : _store.mediaFile(_original, name);
+    Widget picture(Color? paper) {
+      final image = Image.file(
+        file!,
+        fit: BoxFit.contain,
+        errorBuilder: (_, _, _) =>
+            const Center(child: Icon(Icons.broken_image_outlined)),
+      );
+      if (!_blend || paper == null) return image;
+      return ColorFiltered(
+        colorFilter: ColorFilter.matrix(blendMatrix(paper, kPaperColor)),
+        child: image,
+      );
+    }
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Container(
           height: 240,
           decoration: BoxDecoration(
-            color: Colors.black,
+            color: _blend ? kPaperColor : Colors.black,
             borderRadius: kBorderRadius,
             border: Border.all(color: theme.colorScheme.outlineVariant),
           ),
           clipBehavior: Clip.antiAlias,
-          child: name == null
+          child: file == null
               ? null
               : InkWell(
-                  onTap: () => _openMedia(name),
-                  child: Image.file(
-                    _store.mediaFile(_original, name),
-                    fit: BoxFit.contain,
-                    errorBuilder: (_, _, _) =>
-                        const Center(child: Icon(Icons.broken_image_outlined)),
-                  ),
+                  onTap: () => _openMedia(name!),
+                  child: _blend
+                      ? FutureBuilder<Color?>(
+                          future: paperColorOf(file),
+                          builder: (context, snap) => picture(snap.data),
+                        )
+                      : picture(null),
                 ),
         ),
         const SizedBox(height: 8),
@@ -1125,6 +1155,29 @@ class _PostPageState extends State<PostPage> {
             padding: EdgeInsets.only(top: 8),
             child: LinearProgressIndicator(),
           ),
+        const SizedBox(height: 8),
+        SwitchListTile(
+          key: const ValueKey('blend-switch'),
+          contentPadding: EdgeInsets.zero,
+          title: const Text('Blend into page'),
+          subtitle: const Text(
+            'Hides the paper so the stamp looks printed on the page',
+          ),
+          value: _blend,
+          onChanged: (v) => setState(() => _blend = v),
+        ),
+        const SizedBox(height: 4),
+        SegmentedButton<String>(
+          key: const ValueKey('size-choice'),
+          showSelectedIcon: false,
+          segments: const [
+            ButtonSegment(value: sizeSmall, label: Text('Small')),
+            ButtonSegment(value: sizeMedium, label: Text('Medium')),
+            ButtonSegment(value: sizeLarge, label: Text('Large')),
+          ],
+          selected: {_size},
+          onSelectionChanged: (v) => setState(() => _size = v.first),
+        ),
       ],
     );
   }

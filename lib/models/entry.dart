@@ -27,6 +27,11 @@ bool isImage(String fileName) =>
 const kindPost = 'post';
 const kindStamp = 'stamp';
 
+const sizeSmall = 'small';
+const sizeMedium = 'medium';
+const sizeLarge = 'large';
+const stampSizes = [sizeSmall, sizeMedium, sizeLarge];
+
 class Entry {
   const Entry({
     required this.id,
@@ -47,6 +52,8 @@ class Entry {
     this.kind = kindPost,
     this.series = '',
     this.country,
+    this.size = sizeMedium,
+    this.blend = false,
   });
 
   factory Entry.create({
@@ -108,6 +115,12 @@ class Entry {
   /// Stamps only: ISO 3166 alpha-2 code.
   final String? country;
 
+  /// Collectibles only: how big the item is drawn on a booklet page.
+  final String size;
+
+  /// Collectibles only: show the item without its paper, as if printed on the page.
+  final bool blend;
+
   bool get isStamp => kind == kindStamp;
 
   bool get isCollectible => kind != kindPost;
@@ -144,6 +157,8 @@ class Entry {
     bool? conflict,
     String? series,
     Object? country = _keep,
+    String? size,
+    bool? blend,
   }) {
     return Entry(
       id: id,
@@ -164,6 +179,8 @@ class Entry {
       kind: kind,
       series: series ?? this.series,
       country: identical(country, _keep) ? this.country : country as String?,
+      size: size ?? this.size,
+      blend: blend ?? this.blend,
     );
   }
 }

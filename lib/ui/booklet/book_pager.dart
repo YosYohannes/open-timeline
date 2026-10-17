@@ -83,7 +83,7 @@ class _BookPagerState extends State<BookPager>
       alignment: Alignment.centerLeft,
       transform: Matrix4.identity()
         ..setEntry(3, 2, 0.0011)
-        ..rotateY(-angle),
+        ..rotateY(angle),
       child: Stack(
         fit: StackFit.expand,
         children: [

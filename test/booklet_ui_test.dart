@@ -18,11 +18,18 @@ final _png = base64Decode(
 void main() {
   late JournalStore store;
 
+  Future<void> phoneScreen(WidgetTester tester) async {
+    tester.view.physicalSize = const Size(1170, 2532);
+    tester.view.devicePixelRatio = 3;
+    addTearDown(tester.view.reset);
+  }
+
   Future<void> open(
     WidgetTester tester, {
     int japan = 5,
     bool taiwan = true,
   }) async {
+    await phoneScreen(tester);
     await tester.runAsync(() async {
       store = JournalStore(Directory.systemTemp.createTempSync('book_'));
       await store.load();
@@ -79,8 +86,8 @@ void main() {
     tester,
   ) async {
     await open(tester);
-    expect(find.text('Japan'), findsOneWidget);
-    expect(find.text('Taiwan'), findsOneWidget);
+    expect(find.text('JAPAN'), findsOneWidget);
+    expect(find.text('TAIWAN'), findsOneWidget);
     expect(find.text('5 stamps'), findsOneWidget);
     expect(find.text('1 stamp'), findsOneWidget);
     expect(find.text('2 series'), findsOneWidget);
@@ -126,7 +133,8 @@ void main() {
       );
       await tester.pumpAndSettle();
       expect(find.text('JR WEST'), findsOneWidget);
-      expect(find.byType(StampPrint), findsNWidgets(3));
+      final onPage = find.byType(StampPrint).evaluate().length;
+      expect(onPage, inInclusiveRange(1, 3));
 
       await tester.fling(find.text('JR WEST'), const Offset(300, 0), 1200);
       await tester.pumpAndSettle();

@@ -93,7 +93,7 @@ class _BookPagerState extends State<BookPager>
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.black.withValues(alpha: frac * 0.4),
+                    Colors.black.withValues(alpha: frac * 0.25),
                     Colors.transparent,
                   ],
                 ),

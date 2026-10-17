@@ -5,6 +5,7 @@ import '../../models/countries.dart';
 import '../../models/entry.dart';
 import '../../store/journal_store.dart';
 import '../app/store_scope.dart';
+import 'book_cover.dart';
 import 'book_pager.dart';
 import 'collage_layout.dart';
 import 'stamp_image.dart';
@@ -19,6 +20,8 @@ const _tabColors = [
   Color(0xFFB5A07A),
 ];
 
+const kBookRatio = 0.70710678;
+const _tabHeight = 30.0;
 const _pageInset = 16.0;
 const _headerHeight = 26.0;
 const _footerHeight = 22.0;
@@ -86,7 +89,7 @@ class _BookletPageState extends State<BookletPage> {
       body: booklet == null
           ? const Center(child: Text('This booklet is empty'))
           : Padding(
-              padding: const EdgeInsets.fromLTRB(12, 4, 0, 16),
+              padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
               child: LayoutBuilder(
                 builder: (context, box) =>
                     _buildBook(context, booklet, box.biggest),
@@ -97,10 +100,18 @@ class _BookletPageState extends State<BookletPage> {
 
   Widget _buildBook(BuildContext context, Booklet booklet, Size size) {
     final store = StoreScope.read(context);
-    final bookWidth = size.width - 24;
+    final room = size.height - _tabHeight;
+    var bookWidth = size.width;
+    var bookHeight = bookWidth / kBookRatio;
+    if (bookHeight > room) {
+      bookHeight = room;
+      bookWidth = bookHeight * kBookRatio;
+    }
+    final left = (size.width - bookWidth) / 2;
+    final top = _tabHeight + (room - bookHeight) / 2;
     final area = Size(
       bookWidth - _pageInset * 2,
-      size.height - _pageInset * 2 - _headerHeight - _footerHeight,
+      bookHeight - _pageInset * 2 - _headerHeight - _footerHeight,
     );
     final specs = <_PageSpec>[];
     final starts = <int>[];
@@ -119,7 +130,7 @@ class _BookletPageState extends State<BookletPage> {
     final byId = {for (final e in booklet.stamps) e.id: e};
 
     final pages = <Widget>[
-      _Cover(booklet: booklet),
+      BookCover(booklet: booklet),
       for (var i = 0; i < specs.length; i++)
         _Paper(
           title: booklet.sections[specs[i].section].series.isEmpty
@@ -136,34 +147,42 @@ class _BookletPageState extends State<BookletPage> {
 
     return Stack(
       children: [
-        Positioned.fill(
-          right: 24,
+        Positioned(
+          left: left,
+          top: top,
+          width: bookWidth,
+          height: bookHeight,
           child: BookPager(pages: pages, controller: _book),
         ),
         Positioned(
-          right: 0,
-          top: 24,
-          width: 24,
+          left: left,
+          top: top - _tabHeight,
+          width: bookWidth,
+          height: _tabHeight,
           child: ListenableBuilder(
             listenable: _book,
             builder: (context, _) {
               final page = _book.page;
-              return Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  for (var s = 0; s < booklet.sections.length; s++)
-                    _Tab(
-                      key: ValueKey('tab-$s'),
-                      label: booklet.sections[s].series.isEmpty
-                          ? 'Other'
-                          : booklet.sections[s].series,
-                      color: _tabColors[s % _tabColors.length],
-                      selected:
-                          page >= starts[s] &&
-                          (s + 1 >= starts.length || page < starts[s + 1]),
-                      onTap: () => _book.goTo(starts[s]),
-                    ),
-                ],
+              return SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.only(left: 18),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    for (var s = 0; s < booklet.sections.length; s++)
+                      _Tab(
+                        key: ValueKey('tab-$s'),
+                        label: booklet.sections[s].series.isEmpty
+                            ? 'Other'
+                            : booklet.sections[s].series,
+                        color: _tabColors[s % _tabColors.length],
+                        selected:
+                            page >= starts[s] &&
+                            (s + 1 >= starts.length || page < starts[s + 1]),
+                        onTap: () => _book.goTo(starts[s]),
+                      ),
+                  ],
+                ),
               );
             },
           ),
@@ -196,33 +215,26 @@ class _Tab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 6),
-      child: Tooltip(
-        message: label,
-        child: InkWell(
-          onTap: onTap,
-          child: Container(
-            width: selected ? 24 : 18,
-            height: 72,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: const BorderRadius.horizontal(
-                right: Radius.circular(6),
-              ),
-            ),
-            child: RotatedBox(
-              quarterTurns: 1,
-              child: Text(
-                label,
-                maxLines: 1,
-                overflow: TextOverflow.clip,
-                style: const TextStyle(
-                  color: Color(0xFF111111),
-                  fontSize: 10,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
+      padding: const EdgeInsets.only(right: 4),
+      child: InkWell(
+        onTap: onTap,
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 140),
+          height: selected ? _tabHeight : _tabHeight - 6,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: color,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+          ),
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(
+              color: Color(0xFF111111),
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
             ),
           ),
         ),
@@ -252,9 +264,9 @@ class _Paper extends StatelessWidget {
         borderRadius: const BorderRadius.horizontal(right: Radius.circular(4)),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.4),
-            blurRadius: 8,
-            offset: const Offset(2, 2),
+            color: Colors.black.withValues(alpha: 0.3),
+            blurRadius: 6,
+            offset: const Offset(1, 2),
           ),
         ],
       ),
@@ -264,12 +276,12 @@ class _Paper extends StatelessWidget {
             left: 0,
             top: 0,
             bottom: 0,
-            width: 16,
+            width: 12,
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: LinearGradient(
                   colors: [
-                    Colors.black.withValues(alpha: 0.14),
+                    Colors.black.withValues(alpha: 0.05),
                     Colors.transparent,
                   ],
                 ),
@@ -311,73 +323,6 @@ class _Paper extends StatelessWidget {
             ),
           ),
         ],
-      ),
-    );
-  }
-}
-
-class _Cover extends StatelessWidget {
-  const _Cover({required this.booklet});
-
-  final Booklet booklet;
-
-  static String _span(Booklet b) {
-    String m(DateTime d) =>
-        '${const ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'][d.month - 1]} ${d.year}';
-    final a = m(b.first);
-    final z = m(b.last);
-    return a == z ? a : '$a – $z';
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final code = booklet.country;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: const Color(0xFF1B1A18),
-        borderRadius: const BorderRadius.horizontal(right: Radius.circular(6)),
-        border: Border.all(color: const Color(0xFF3A372F)),
-      ),
-      child: Center(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              code == null ? '📖' : countryFlag(code),
-              style: const TextStyle(fontSize: 72),
-            ),
-            const SizedBox(height: 16),
-            Text(
-              booklet.name,
-              style: theme.textTheme.headlineMedium?.copyWith(
-                color: const Color(0xFFE9DFC8),
-                letterSpacing: 1.5,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              '${booklet.count} ${booklet.count == 1 ? 'stamp' : 'stamps'}',
-              style: theme.textTheme.bodyLarge?.copyWith(
-                color: const Color(0xFFB9AE95),
-              ),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              _span(booklet),
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF8E846E),
-              ),
-            ),
-            const SizedBox(height: 24),
-            Text(
-              'Swipe to turn the page',
-              style: theme.textTheme.bodySmall?.copyWith(
-                color: const Color(0xFF6E664F),
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }

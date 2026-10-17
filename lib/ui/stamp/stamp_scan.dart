@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 
 import '../../models/entry.dart';
 import '../app/store_scope.dart';
@@ -10,6 +11,8 @@ import '../widgets/snack.dart';
 
 abstract class StampScanner {
   Future<File?> scan();
+
+  Future<File?> pickPhoto({required bool camera});
 }
 
 class PlatformStampScanner implements StampScanner {
@@ -20,22 +23,67 @@ class PlatformStampScanner implements StampScanner {
     final path = await _channel.invokeMethod<String>('scan');
     return path == null ? null : File(path);
   }
+
+  @override
+  Future<File?> pickPhoto({required bool camera}) async {
+    final x = await ImagePicker().pickImage(
+      source: camera ? ImageSource.camera : ImageSource.gallery,
+      maxWidth: 2560,
+      maxHeight: 2560,
+      imageQuality: 85,
+    );
+    return x == null ? null : File(x.path);
+  }
 }
 
 Future<File?> scanWithMessage(
   BuildContext context,
   StampScanner scanner,
 ) async {
+  String reason;
   try {
     return await scanner.scan();
   } on PlatformException catch (e) {
-    if (context.mounted) {
-      showSnack(context, "Couldn't open the scanner: ${e.message ?? e.code}");
-    }
+    reason = e.message ?? e.code;
   } on MissingPluginException {
-    if (context.mounted) showSnack(context, 'Scanning is not available here');
+    reason = 'not available on this device';
   }
-  return null;
+  if (!context.mounted) return null;
+  final choice = await showDialog<bool>(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      title: const Text('The scanner could not start'),
+      content: SingleChildScrollView(
+        child: Text(
+          'You can still add the stamp from a photo, but it will not be '
+          'flattened automatically.\n\nReason: $reason',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(ctx),
+          child: const Text('Cancel'),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(ctx, false),
+          child: const Text('Gallery'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(ctx, true),
+          child: const Text('Camera'),
+        ),
+      ],
+    ),
+  );
+  if (choice == null) return null;
+  try {
+    return await scanner.pickPhoto(camera: choice);
+  } on PlatformException catch (e) {
+    if (context.mounted) {
+      showSnack(context, "Couldn't open that: ${e.message ?? e.code}");
+    }
+    return null;
+  }
 }
 
 Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {

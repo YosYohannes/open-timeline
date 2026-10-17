@@ -2,6 +2,7 @@ package com.opentimeline.open_timeline
 
 import android.app.Activity
 import android.content.Intent
+import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.documentscanner.GmsDocumentScannerOptions
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanning
 import com.google.mlkit.vision.documentscanner.GmsDocumentScanningResult
@@ -16,18 +17,26 @@ class DocumentScan(private val activity: Activity) {
             result.error("busy", "A scan is already open", null)
             return
         }
-        val options = GmsDocumentScannerOptions.Builder()
-            .setGalleryImportAllowed(true)
-            .setPageLimit(1)
-            .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
-            .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
-            .build()
         pending = result
-        GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
-            .addOnSuccessListener { sender ->
-                activity.startIntentSenderForResult(sender, REQUEST, null, 0, 0, 0)
-            }
-            .addOnFailureListener { e -> finish { it.error("scan", e.message, null) } }
+        try {
+            val options = GmsDocumentScannerOptions.Builder()
+                .setGalleryImportAllowed(true)
+                .setPageLimit(1)
+                .setResultFormats(GmsDocumentScannerOptions.RESULT_FORMAT_JPEG)
+                .setScannerMode(GmsDocumentScannerOptions.SCANNER_MODE_FULL)
+                .build()
+            GmsDocumentScanning.getClient(options).getStartScanIntent(activity)
+                .addOnSuccessListener { sender ->
+                    try {
+                        activity.startIntentSenderForResult(sender, REQUEST, null, 0, 0, 0)
+                    } catch (e: Exception) {
+                        finish { it.error("scan", describe(e), null) }
+                    }
+                }
+                .addOnFailureListener { e -> finish { it.error("scan", describe(e), null) } }
+        } catch (e: Exception) {
+            finish { it.error("scan", describe(e), null) }
+        }
     }
 
     fun handle(requestCode: Int, resultCode: Int, data: Intent?): Boolean {
@@ -48,9 +57,14 @@ class DocumentScan(private val activity: Activity) {
                 finish { it.success(out.path) }
             }
         } catch (e: Exception) {
-            finish { it.error("scan", e.message, null) }
+            finish { it.error("scan", describe(e), null) }
         }
         return true
+    }
+
+    private fun describe(e: Throwable): String {
+        val code = (e as? MlKitException)?.errorCode?.let { " (code $it)" } ?: ""
+        return "$e$code\n" + e.stackTrace.take(3).joinToString("\n") { "  at $it" }
     }
 
     private fun finish(reply: (MethodChannel.Result) -> Unit) {

@@ -22,6 +22,7 @@ class FakeScanner implements StampScanner {
   final bool cancel;
   final Object? error;
   final scanned = <File>[];
+  final picked = <bool>[];
 
   @override
   Future<File?> scan() async {
@@ -30,6 +31,14 @@ class FakeScanner implements StampScanner {
     final f = File('${dir.path}/scan-${scanned.length}.jpg')
       ..writeAsBytesSync(_png);
     scanned.add(f);
+    return f;
+  }
+
+  @override
+  Future<File?> pickPhoto({required bool camera}) async {
+    picked.add(camera);
+    final f = File('${dir.path}/photo-${picked.length}.jpg')
+      ..writeAsBytesSync(_png);
     return f;
   }
 }
@@ -42,8 +51,9 @@ void main() {
 
   Future<void> open(
     WidgetTester tester,
-    FakeScanner Function(Directory) make,
-  ) async {
+    FakeScanner Function(Directory) make, {
+    bool settle = true,
+  }) async {
     late FakeScanner scanner;
     await tester.runAsync(() async {
       scratch = Directory.systemTemp.createTempSync('scan_tmp_');
@@ -74,7 +84,7 @@ void main() {
       );
       await tester.pump();
     }
-    await tester.pumpAndSettle();
+    if (settle) await tester.pumpAndSettle();
   }
 
   Finder field(String hint) => find.byWidgetPredicate(
@@ -152,15 +162,43 @@ void main() {
     expect(find.byType(PostPage), findsNothing);
   });
 
-  testWidgets('a scanner failure is shown instead of crashing', (tester) async {
+  testWidgets(
+    'a scanner failure explains itself and can fall back to a photo',
+    (tester) async {
+      late FakeScanner scanner;
+      await tester.runAsync(() async {});
+      await open(
+        tester,
+        (d) => scanner = FakeScanner(
+          d,
+          error: PlatformException(code: 'scan', message: 'no module'),
+        ),
+        settle: false,
+      );
+      expect(find.text('The scanner could not start'), findsOneWidget);
+      expect(find.textContaining('no module'), findsOneWidget);
+
+      await tester.runAsync(() => tester.tap(find.text('Gallery')));
+      for (var i = 0; i < 30; i++) {
+        await tester.runAsync(
+          () => Future<void>.delayed(const Duration(milliseconds: 50)),
+        );
+        await tester.pump();
+      }
+      await tester.pumpAndSettle();
+      expect(scanner.picked, [false]);
+      expect(find.text('New stamp'), findsOneWidget);
+    },
+  );
+
+  testWidgets('cancelling the fallback opens nothing', (tester) async {
     await open(
       tester,
-      (d) => FakeScanner(
-        d,
-        error: PlatformException(code: 'scan', message: 'no module'),
-      ),
+      (d) => FakeScanner(d, error: PlatformException(code: 'scan')),
+      settle: false,
     );
+    await tester.tap(find.text('Cancel'));
+    await tester.pumpAndSettle();
     expect(find.byType(PostPage), findsNothing);
-    expect(find.textContaining('no module'), findsOneWidget);
   });
 }

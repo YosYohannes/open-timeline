@@ -65,6 +65,15 @@ void main() {
       },
     );
 
+    test('the cut-out method is written only when it is set', () {
+      expect(entryToMarkdown(stamp()), isNot(contains('cutout:')));
+      for (final method in ['#F1E6C8', 'subject']) {
+        final text = entryToMarkdown(stamp().copyWith(cutout: method));
+        expect(text, contains('cutout: "$method"'));
+        expect(entryFromMarkdown(text).cutout, method);
+      }
+    });
+
     test('an unknown size reads as medium', () {
       final text = entryToMarkdown(stamp().copyWith(size: sizeSmall))
           .replaceFirst('"small"', '"huge"');
@@ -115,6 +124,18 @@ void main() {
       );
       expect(merged.size, sizeLarge);
       expect(merged.blend, isTrue);
+    });
+
+    test('the cut-out method follows the side that changed it', () {
+      final base = stamp();
+      final merged = mergeEntry(
+        base: base,
+        local: base.copyWith(cutout: 'subject'),
+        remote: base.copyWith(size: sizeSmall),
+        localUser: 'a@x.com',
+      );
+      expect(merged.cutout, 'subject');
+      expect(merged.size, sizeSmall);
     });
   });
 

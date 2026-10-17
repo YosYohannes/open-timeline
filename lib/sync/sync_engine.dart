@@ -717,7 +717,7 @@ The text of the post.
 * `title` and `color` (the author's chosen colour, `#RRGGBB`) are optional.
 * `location: [lat, lon]` is written in the format the Obsidian "Map View" plugin understands.
 * `media` lists the photos and videos stored next to the post, in the same folder.
-* A stamp is a post with `kind: "stamp"`, a `series` and a `country` (a two-letter code such as `JP`), and one image in `media`. `size` (`small` or `large`) and `blend: true` appear only when they are not the defaults.
+* A stamp is a post with `kind: "stamp"`, a `series` and a `country` (a two-letter code such as `JP`), and one image in `media`. `size` (`small` or `large`), `blend: true` (paper removed) and `cutout` (a paper colour such as `#F1E6C8`, or `subject`) appear only when they are not the defaults.
 * `deleted: true` marks a deleted post; the file stays so the other phone learns about it.
 * `conflict: true` means two edits of the text clashed; both are kept in the text, tidy up and save.
 

@@ -88,22 +88,25 @@ Future<File?> scanWithMessage(
   }
 }
 
-Future<File?> cropFromPage(
+typedef CropResult = ({File? crop, bool anotherPage});
+
+Future<CropResult> cropFromPage(
   NavigatorState navigator,
   File page, {
   int saved = 0,
 }) async {
-  final bytes = await navigator.push<Uint8List>(
+  final result = await navigator.push<Object>(
     MaterialPageRoute(
       builder: (_) => CropPage(file: page, saved: saved),
     ),
   );
-  if (bytes == null) return null;
+  if (result is AnotherPage) return (crop: null, anotherPage: true);
+  if (result is! Uint8List) return (crop: null, anotherPage: false);
   final out = File(
     '${page.parent.path}/crop-${DateTime.now().microsecondsSinceEpoch}.png',
   );
-  await out.writeAsBytes(bytes);
-  return out;
+  await out.writeAsBytes(result);
+  return (crop: out, anotherPage: false);
 }
 
 Future<void> _discard(File file) async {
@@ -111,6 +114,17 @@ Future<void> _discard(File file) async {
     await file.delete();
   } catch (_) {}
 }
+
+Entry _sameEvent(Entry base, Entry from) => base.copyWith(
+  time: from.time,
+  utcOffsetMinutes: from.utcOffsetMinutes,
+  lat: from.lat,
+  lon: from.lon,
+  place: from.place,
+  country: from.country,
+  series: from.series,
+  tags: from.tags,
+);
 
 Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
   final store = StoreScope.read(context);
@@ -120,43 +134,52 @@ Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
     return;
   }
   final navigator = Navigator.of(context);
-  final page = await scanWithMessage(
-    context,
-    scanner ?? PlatformStampScanner(),
-  );
-  if (page == null) return;
-  try {
-    var saved = 0;
-    while (true) {
-      final crop = await cropFromPage(navigator, page, saved: saved);
-      if (crop == null) break;
-      final base = Entry.create(
-        author: me,
-        kind: kindStamp,
-      ).copyWith(color: store.settings.myColor);
-      final String name;
-      try {
-        name = await store.importMedia(base, crop);
-      } finally {
-        await _discard(crop);
-      }
-      final paper = await paperColorOf(store.mediaFile(base, name));
-      final filed = await navigator.push<bool>(
-        MaterialPageRoute<bool>(
-          builder: (_) => PostPage(
-            entry: base.copyWith(
-              media: [name],
-              blend: paper != null && isLightPaper(paper),
+  final platform = scanner ?? PlatformStampScanner();
+  var saved = 0;
+  Entry? previous;
+  File? page = await scanWithMessage(context, platform);
+  while (page != null) {
+    var anotherPage = false;
+    try {
+      while (true) {
+        final result = await cropFromPage(navigator, page, saved: saved);
+        anotherPage = result.anotherPage;
+        final crop = result.crop;
+        if (crop == null) break;
+        var base = Entry.create(
+          author: me,
+          kind: kindStamp,
+        ).copyWith(color: store.settings.myColor);
+        if (previous != null) base = _sameEvent(base, previous);
+        final String name;
+        try {
+          name = await store.importMedia(base, crop);
+        } finally {
+          await _discard(crop);
+        }
+        final paper = await paperColorOf(store.mediaFile(base, name));
+        final filed = await navigator.push<bool>(
+          MaterialPageRoute<bool>(
+            builder: (_) => PostPage(
+              entry: base.copyWith(
+                media: [name],
+                blend: paper != null && isLightPaper(paper),
+              ),
+              isNew: true,
+              scanner: scanner,
             ),
-            isNew: true,
-            scanner: scanner,
+            fullscreenDialog: true,
           ),
-          fullscreenDialog: true,
-        ),
-      );
-      if (filed == true) saved++;
+        );
+        if (filed == true) {
+          saved++;
+          previous = store.byId(base.id);
+        }
+      }
+    } finally {
+      await _discard(page);
     }
-  } finally {
-    await _discard(page);
+    if (!anotherPage || !context.mounted) break;
+    page = await scanWithMessage(context, platform);
   }
 }

@@ -70,6 +70,11 @@ Future<Uint8List> cropToPng(ui.Image image, Rect area) async {
   return data!.buffer.asUint8List();
 }
 
+/// Popped from the crop screen to scan another page with the same event.
+class AnotherPage {
+  const AnotherPage();
+}
+
 class CropPage extends StatefulWidget {
   const CropPage({super.key, required this.file, this.saved = 0});
 
@@ -189,8 +194,8 @@ class _CropPageState extends State<CropPage> {
                     saved == 0
                         ? 'Drag the corners to frame one stamp. A page with several stamps can be cropped one at a time.'
                         : saved == 1
-                        ? '1 stamp saved. Crop another, or tap Done.'
-                        : '$saved stamps saved. Crop another, or tap Done.',
+                        ? '1 stamp saved. Crop another, scan another page, or tap Done.'
+                        : '$saved stamps saved. Crop another, scan another page, or tap Done.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall,
                   ),
@@ -200,6 +205,16 @@ class _CropPageState extends State<CropPage> {
                       style: TextStyle(color: theme.colorScheme.error),
                     ),
                   const SizedBox(height: 4),
+                  if (saved > 0)
+                    TextButton.icon(
+                      key: const ValueKey('another-page'),
+                      onPressed: _busy
+                          ? null
+                          : () =>
+                                Navigator.of(context).pop(const AnotherPage()),
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      label: const Text('Scan another page'),
+                    ),
                   FilterChip(
                     key: const ValueKey('square'),
                     avatar: const Icon(Icons.crop_square, size: 18),
@@ -268,6 +283,8 @@ class _CropArea extends StatefulWidget {
 
 class _CropAreaState extends State<_CropArea> {
   _Drag _drag = _Drag.none;
+  Rect _startCrop = Rect.zero;
+  Offset _startPoint = Offset.zero;
 
   Size get _imageSize =>
       Size(widget.image.width.toDouble(), widget.image.height.toDouble());
@@ -308,9 +325,9 @@ class _CropAreaState extends State<_CropArea> {
           return s.contains(p) ? _Drag.move : _Drag.none;
         }
 
-        void update(Offset delta) {
-          final d = delta / scale;
-          final r = widget.crop;
+        void update(Offset point) {
+          final d = (point - _startPoint) / scale;
+          final r = _startCrop;
           final next = switch (_drag) {
             _Drag.move => r.shift(d),
             _Drag.tl => Rect.fromLTRB(
@@ -377,8 +394,12 @@ class _CropAreaState extends State<_CropArea> {
         return GestureDetector(
           behavior: HitTestBehavior.opaque,
           dragStartBehavior: DragStartBehavior.down,
-          onPanStart: (d) => _drag = pick(d.localPosition),
-          onPanUpdate: (d) => update(d.delta),
+          onPanStart: (d) {
+            _drag = pick(d.localPosition);
+            _startCrop = widget.crop;
+            _startPoint = d.localPosition;
+          },
+          onPanUpdate: (d) => update(d.localPosition),
           onPanEnd: (_) => _drag = _Drag.none,
           child: CustomPaint(
             key: const ValueKey('crop-area'),

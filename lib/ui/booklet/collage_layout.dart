@@ -1,21 +1,29 @@
 import 'dart:math' as math;
+import 'dart:typed_data';
 import 'dart:ui';
 
 import '../../models/entry.dart';
+import 'stamp_cutout.dart';
 
 const kMatSide = 6.0;
-const kCaptionHeight = 32.0;
+const _cell = 5.0;
+const _printGap = 2;
+const _cutoutGap = 1;
 
 class CollageItem {
   const CollageItem({
     required this.id,
     required this.ratio,
     required this.size,
+    this.mask,
   });
 
   final String id;
   final double ratio;
   final String size;
+
+  /// The stamp's outline when its paper is removed; a mounted print when null.
+  final CutoutMask? mask;
 }
 
 class Placed {
@@ -23,7 +31,7 @@ class Placed {
 
   final String id;
 
-  /// Mat, image and caption together, in page coordinates.
+  /// The stamp with its mat, in page coordinates.
   final Rect rect;
 
   /// Just the image.
@@ -36,98 +44,144 @@ double sizeFactor(String size) => switch (size) {
   _ => 1.0,
 };
 
-class _Cell {
-  _Cell(this.item, this.w, this.h);
+class _Shape {
+  _Shape(this.item, this.image, this.mat);
 
   final CollageItem item;
-  double w;
-  double h;
+  final Size image;
+  final double mat;
+
+  late final int cols = ((image.width + mat * 2) / _cell).ceil();
+  late final int rows = ((image.height + mat * 2) / _cell).ceil();
+
+  /// Offsets, in cells, of the cells the stamp covers.
+  late final List<int> covered = () {
+    final out = <int>[];
+    final mask = item.mask;
+    for (var y = 0; y < rows; y++) {
+      for (var x = 0; x < cols; x++) {
+        if (mask == null || mask.at((x + 0.5) / cols, (y + 0.5) / rows)) {
+          out.add(y * cols + x);
+        }
+      }
+    }
+    return out;
+  }();
+
+  int get gap => item.mask == null ? _printGap : _cutoutGap;
 }
 
+class _Page {
+  _Page(this.cols, this.rows) : taken = Uint8List(cols * rows);
+
+  final int cols;
+  final int rows;
+  final Uint8List taken;
+  final placed = <Placed>[];
+
+  bool fits(_Shape s, int x, int y) {
+    for (final o in s.covered) {
+      final cx = x + o % s.cols;
+      final cy = y + o ~/ s.cols;
+      if (taken[cy * cols + cx] != 0) return false;
+    }
+    return true;
+  }
+
+  (int, int)? find(_Shape s) {
+    if (s.cols > cols || s.rows > rows) return null;
+    for (var y = 0; y <= rows - s.rows; y++) {
+      for (var x = 0; x <= cols - s.cols; x++) {
+        if (fits(s, x, y)) return (x, y);
+      }
+    }
+    return null;
+  }
+
+  void put(_Shape s, int x, int y) {
+    final g = s.gap;
+    for (final o in s.covered) {
+      final cx = x + o % s.cols;
+      final cy = y + o ~/ s.cols;
+      for (var dy = -g; dy <= g; dy++) {
+        for (var dx = -g; dx <= g; dx++) {
+          final nx = cx + dx;
+          final ny = cy + dy;
+          if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
+            taken[ny * cols + nx] = 1;
+          }
+        }
+      }
+    }
+    placed.add(
+      Placed(
+        id: s.item.id,
+        rect: Rect.fromLTWH(
+          x * _cell,
+          y * _cell,
+          s.image.width + s.mat * 2,
+          s.image.height + s.mat * 2,
+        ),
+        image: s.image,
+      ),
+    );
+  }
+}
+
+/// Packs stamps onto pages, each at the first free spot from the top left, so
+/// outlines nest into each other instead of sitting in rows.
 List<List<Placed>> layoutCollage(
   List<CollageItem> items,
   Size area, {
-  double gap = 14,
   double? baseHeight,
 }) {
   if (items.isEmpty || area.width <= 0 || area.height <= 0) return const [];
   final base = baseHeight ?? math.min(area.width * 0.36, 150.0);
-  final extraW = kMatSide * 2;
-  final extraH = kMatSide * 2 + kCaptionHeight;
+  final cols = (area.width / _cell).floor();
+  final rows = (area.height / _cell).floor();
 
-  _Cell cell(CollageItem it) {
+  _Shape shape(CollageItem it) {
+    final mat = it.mask == null ? kMatSide : 0.0;
     final ratio = it.ratio.clamp(0.25, 4.0);
     var h = base * sizeFactor(it.size);
     var w = h * ratio;
-    final maxW = area.width - extraW;
+    final maxW = cols * _cell - mat * 2 - _cell;
     if (w > maxW) {
       w = maxW;
       h = w / ratio;
     }
-    final maxH = area.height - extraH;
+    final maxH = rows * _cell - mat * 2 - _cell;
     if (h > maxH) {
       h = maxH;
       w = h * ratio;
     }
-    return _Cell(it, w, h);
+    return _Shape(it, Size(w, h), mat);
   }
 
-  final rows = <List<_Cell>>[];
-  var row = <_Cell>[];
-  var rowWidth = 0.0;
+  final pages = <_Page>[];
   for (final it in items) {
-    final c = cell(it);
-    final next = (row.isEmpty ? 0.0 : gap) + c.w + extraW;
-    if (row.isNotEmpty && rowWidth + next > area.width) {
-      rows.add(row);
-      row = [];
-      rowWidth = 0;
+    final s = shape(it);
+    var spot = pages.isEmpty ? null : pages.last.find(s);
+    if (spot == null) {
+      pages.add(_Page(cols, rows));
+      spot = pages.last.find(s) ?? (0, 0);
     }
-    row.add(c);
-    rowWidth += (row.length == 1 ? 0.0 : gap) + c.w + extraW;
+    pages.last.put(s, spot.$1, spot.$2);
   }
-  if (row.isNotEmpty) rows.add(row);
+  return [for (final p in pages) _centred(p.placed, area)];
+}
 
-  for (var i = 0; i < rows.length; i++) {
-    final r = rows[i];
-    final last = i == rows.length - 1;
-    final images = r.fold(0.0, (n, c) => n + c.w);
-    final fixed = (r.length - 1) * gap + r.length * extraW;
-    var scale = (area.width - fixed) / images;
-    scale = last ? math.min(scale, 1.0) : math.min(scale, 1.35);
-    scale = math.max(scale, 0.5);
-    for (final c in r) {
-      c.w *= scale;
-      c.h *= scale;
-    }
+List<Placed> _centred(List<Placed> placed, Size area) {
+  var right = 0.0;
+  var bottom = 0.0;
+  for (final p in placed) {
+    right = math.max(right, p.rect.right);
+    bottom = math.max(bottom, p.rect.bottom);
   }
-
-  final pages = <List<Placed>>[];
-  var placed = <Placed>[];
-  var y = 0.0;
-  for (final r in rows) {
-    final rowHeight = r.map((c) => c.h + extraH).reduce(math.max);
-    if (placed.isNotEmpty && y + rowHeight > area.height) {
-      pages.add(placed);
-      placed = [];
-      y = 0;
-    }
-    final rowWidth =
-        r.fold(0.0, (n, c) => n + c.w + extraW) + (r.length - 1) * gap;
-    var x = (area.width - rowWidth) / 2;
-    for (final c in r) {
-      final h = c.h + extraH;
-      placed.add(
-        Placed(
-          id: c.item.id,
-          rect: Rect.fromLTWH(x, y + (rowHeight - h) / 2, c.w + extraW, h),
-          image: Size(c.w, c.h),
-        ),
-      );
-      x += c.w + extraW + gap;
-    }
-    y += rowHeight + gap;
-  }
-  if (placed.isNotEmpty) pages.add(placed);
-  return pages;
+  final dx = math.max(0.0, (area.width - right) / 2);
+  final dy = math.max(0.0, (area.height - bottom) / 2);
+  return [
+    for (final p in placed)
+      Placed(id: p.id, rect: p.rect.shift(Offset(dx, dy)), image: p.image),
+  ];
 }

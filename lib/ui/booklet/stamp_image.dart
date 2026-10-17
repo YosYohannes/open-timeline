@@ -81,19 +81,6 @@ bool isLightPaper(ui.Color c) {
   return lo >= 185 && hi - lo <= 75;
 }
 
-List<double> blendMatrix(ui.Color paper, ui.Color page) {
-  double gain(double p, double q) => p <= 0.02 ? 1.0 : math.min(4.0, q / p);
-  final r = gain(paper.r, page.r);
-  final g = gain(paper.g, page.g);
-  final b = gain(paper.b, page.b);
-  return [
-    r, 0, 0, 0, 0, //
-    0, g, 0, 0, 0,
-    0, 0, b, 0, 0,
-    0, 0, 0, 1, 0,
-  ];
-}
-
 final _papers = <String, Future<ui.Color?>>{};
 
 Future<ui.Color?> paperColorOf(File file) {

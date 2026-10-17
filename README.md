@@ -15,7 +15,7 @@
 
 - **Posts** with a date and time, an optional location, a title, text, tags (rename, merge or delete them in Settings), and any number of photos and videos.
 - **Stamps.** Scan a stamp from a booklet or passport. It is flattened, cropped and saved as a one-image entry with a series, a country, a date and a place, and shows up on the timeline as a compact strip.
-- **Collection.** The Collection tab is a shelf with one booklet per country. Each has a kraft-paper cover with the country's flag as the spine (drawn for East and Southeast Asia so far), a contents page that jumps to each series, and pages of stamps laid out as a collage. A stamp can be Small, Medium or Large, and either a mounted print or blended into the page. Pages turn like a book.
+- **Collection.** The Collection tab is a shelf with one booklet per country. Each has a kraft-paper cover with the country's flag as the spine (drawn for East and Southeast Asia so far), a contents page that jumps to each series, and pages of stamps laid out as a collage. A stamp can be Small, Medium or Large, and either a mounted print or cut out with its background removed, by paper colour or with the phone's on-device AI. Pages turn like a book.
 - **Timeline, Calendar and Map** views, with "On this day" memories, filters by date, tag and person, and search.
 - **One diary, as many people as you like.** Each person uses their own Google account and their own phone, and everyone points the app at the same shared Drive folder. It works just as well with only you. Each person picks their own colour.
 - **Sync on a button press.** Nothing syncs on its own. A notification keeps a running sync going if you lock the phone. If you both edit the same post, nothing is lost: different changes are all kept, and clashing text keeps both versions with a warning.
@@ -56,7 +56,7 @@ media: ["20261016-143205-k3f9_x7q2.jpg"]
 We drove out early to beat the traffic...
 ```
 
-A stamp is the same kind of file with a few more header fields. `size` and `blend` appear only when they are not the defaults (medium, off):
+A stamp is the same kind of file with a few more header fields. `size`, `blend` and `cutout` appear only when they are not the defaults (medium, off, automatic):
 
 ```markdown
 ---

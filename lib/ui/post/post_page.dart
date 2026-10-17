@@ -17,8 +17,11 @@ import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../booklet/stamp_cutout.dart';
 import '../booklet/stamp_image.dart';
+import '../booklet/subject_segmenter.dart';
 import '../stamp/country_picker.dart';
+import '../stamp/paper_picker.dart';
 import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
 import '../widgets/format.dart';
@@ -69,6 +72,9 @@ class _PostPageState extends State<PostPage> {
   String? _countryCode;
   late String _size;
   late bool _blend;
+  late String _cutout;
+  String _previewKey = '';
+  Future<Cutout?>? _preview;
 
   final List<String> _imported = [];
 
@@ -94,6 +100,7 @@ class _PostPageState extends State<PostPage> {
     _countryCode = e.country;
     _size = e.size;
     _blend = e.blend;
+    _cutout = e.cutout;
     _tagInput.addListener(_changed);
     _tagFocus.addListener(_changed);
     _tags = [...e.tags];
@@ -141,6 +148,7 @@ class _PostPageState extends State<PostPage> {
         _countryCode != o.country ||
         _size != o.size ||
         _blend != o.blend ||
+        _cutout != o.cutout ||
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
@@ -165,6 +173,7 @@ class _PostPageState extends State<PostPage> {
       country: _countryCode,
       size: _size,
       blend: _blend,
+      cutout: _cutout,
       color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
@@ -392,7 +401,7 @@ class _PostPageState extends State<PostPage> {
       );
       if (file == null) return;
       if (!mounted) return;
-      final crop = await cropFromPage(Navigator.of(context), file);
+      final crop = (await cropFromPage(Navigator.of(context), file)).crop;
       try {
         await file.delete();
       } catch (_) {}
@@ -407,6 +416,7 @@ class _PostPageState extends State<PostPage> {
           setState(() {
             _media = [name];
             _blend = paper != null && isLightPaper(paper);
+            _cutout = '';
           });
         }
         _deleteFiles(old.where(_imported.contains));
@@ -708,7 +718,9 @@ class _PostPageState extends State<PostPage> {
           ),
           actions: [
             FilledButton(
-              onPressed: _saving || !_dirty ? null : _save,
+              onPressed: _saving || !(_dirty || (widget.isNew && _isStamp))
+                  ? null
+                  : _save,
               child: const Text('Save'),
             ),
             if (widget.isNew)
@@ -1100,22 +1112,31 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
+  Future<Cutout?> _previewCutout(File file) {
+    final key = '${file.path}|$_cutout';
+    if (key != _previewKey) {
+      _previewKey = key;
+      _preview = cutoutOf(file, _cutout);
+    }
+    return _preview!;
+  }
+
+  Future<void> _pickPaper(File file) async {
+    final picked = await Navigator.of(context).push<String>(
+      MaterialPageRoute(builder: (_) => PaperPickerPage(file: file)),
+    );
+    if (picked != null && mounted) setState(() => _cutout = picked);
+  }
+
   Widget _stampPreview(ThemeData theme) {
     final name = _media.firstOrNull;
     final file = name == null ? null : _store.mediaFile(_original, name);
-    Widget picture(Color? paper) {
-      final image = Image.file(
-        file!,
-        fit: BoxFit.contain,
-        errorBuilder: (_, _, _) =>
-            const Center(child: Icon(Icons.broken_image_outlined)),
-      );
-      if (!_blend || paper == null) return image;
-      return ColorFiltered(
-        colorFilter: ColorFilter.matrix(blendMatrix(paper, kPaperColor)),
-        child: image,
-      );
-    }
+    Widget picture(File shown) => Image.file(
+      shown,
+      fit: BoxFit.contain,
+      errorBuilder: (_, _, _) =>
+          const Center(child: Icon(Icons.broken_image_outlined)),
+    );
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -1133,11 +1154,46 @@ class _PostPageState extends State<PostPage> {
               : InkWell(
                   onTap: () => _openMedia(name!),
                   child: _blend
-                      ? FutureBuilder<Color?>(
-                          future: paperColorOf(file),
-                          builder: (context, snap) => picture(snap.data),
+                      ? FutureBuilder<Cutout?>(
+                          future: _previewCutout(file),
+                          builder: (context, snap) {
+                            final cut = snap.data;
+                            final done =
+                                snap.connectionState == ConnectionState.done;
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                picture(cut?.file ?? file),
+                                if (!done)
+                                  const Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: LinearProgressIndicator(),
+                                  ),
+                                if (done && cut == null)
+                                  Align(
+                                    alignment: Alignment.bottomCenter,
+                                    child: Container(
+                                      width: double.infinity,
+                                      color: Colors.black54,
+                                      padding: const EdgeInsets.all(6),
+                                      child: Text(
+                                        _cutout == cutoutSubject
+                                            ? "AI removal didn't work: ${subjectSegmenter.lastError ?? 'unknown reason'}"
+                                            : "Couldn't remove the background. "
+                                                  'Try picking the paper colour.',
+                                        textAlign: TextAlign.center,
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 12,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                              ],
+                            );
+                          },
                         )
-                      : picture(null),
+                      : picture(file),
                 ),
         ),
         const SizedBox(height: 8),
@@ -1159,13 +1215,52 @@ class _PostPageState extends State<PostPage> {
         SwitchListTile(
           key: const ValueKey('blend-switch'),
           contentPadding: EdgeInsets.zero,
-          title: const Text('Blend into page'),
+          title: const Text('Remove background'),
           subtitle: const Text(
-            'Hides the paper so the stamp looks printed on the page',
+            'Cuts the stamp out of its paper so it sits on the page',
           ),
           value: _blend,
           onChanged: (v) => setState(() => _blend = v),
         ),
+        if (_blend && file != null) ...[
+          SegmentedButton<bool>(
+            key: const ValueKey('cutout-method'),
+            showSelectedIcon: false,
+            segments: const [
+              ButtonSegment(value: false, label: Text('Paper colour')),
+              ButtonSegment(value: true, label: Text('AI removal')),
+            ],
+            selected: {_cutout == cutoutSubject},
+            onSelectionChanged: (v) => setState(() {
+              _cutout = v.first ? cutoutSubject : '';
+            }),
+          ),
+          if (_cutout != cutoutSubject)
+            ListTile(
+              key: const ValueKey('paper-pick'),
+              contentPadding: EdgeInsets.zero,
+              leading: _cutout.isEmpty
+                  ? const Icon(Icons.auto_fix_high_outlined)
+                  : Container(
+                      width: 24,
+                      height: 24,
+                      decoration: BoxDecoration(
+                        color: paperOfMethod(_cutout),
+                        border: Border.all(color: theme.colorScheme.outline),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                    ),
+              title: const Text('Paper colour'),
+              subtitle: Text(
+                _cutout.isEmpty
+                    ? 'Found from the edge of the picture'
+                    : _cutout,
+              ),
+              trailing: const Text('Pick'),
+              onTap: () => _pickPaper(file),
+            ),
+          const SizedBox(height: 4),
+        ],
         const SizedBox(height: 4),
         SegmentedButton<String>(
           key: const ValueKey('size-choice'),

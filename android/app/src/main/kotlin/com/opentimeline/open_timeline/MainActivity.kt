@@ -13,6 +13,7 @@ import io.flutter.plugin.common.MethodChannel
 @UnstableApi
 class MainActivity : FlutterActivity() {
     private val scan = DocumentScan(this)
+    private val subject = SubjectSegment(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -49,6 +50,7 @@ class MainActivity : FlutterActivity() {
             .setMethodCallHandler { call, result ->
                 when (call.method) {
                     "scan" -> scan.start(result)
+                    "segment" -> subject.run(call.arguments as String, result)
                     else -> result.notImplemented()
                 }
             }

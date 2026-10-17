@@ -4,7 +4,7 @@ import 'dart:ui';
 import '../../models/entry.dart';
 
 const kMatSide = 6.0;
-const kCaptionHeight = 22.0;
+const kCaptionHeight = 32.0;
 
 class CollageItem {
   const CollageItem({

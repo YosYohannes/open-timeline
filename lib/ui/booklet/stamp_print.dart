@@ -14,12 +14,10 @@ class StampPrint extends StatelessWidget {
   final Entry entry;
   final Placed placed;
 
-  String get _caption {
-    final place = entry.place?.trim() ?? '';
-    final date =
-        '${entry.wallTime.day} ${_month(entry.wallTime.month)} ${entry.wallTime.year % 100}';
-    return place.isEmpty ? date : '$place · $date';
-  }
+  String get _date =>
+      '${entry.wallTime.day} ${_month(entry.wallTime.month)} ${entry.wallTime.year % 100}';
+
+  String get _place => entry.place?.trim() ?? '';
 
   static String _month(int m) => const [
     'Jan',
@@ -107,14 +105,22 @@ class StampPrint extends StatelessWidget {
             body,
             SizedBox(
               height: kCaptionHeight,
-              child: Align(
-                alignment: Alignment.center,
-                child: Text(
-                  _caption,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(fontSize: 10, color: kInkBrown),
-                ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  if (_place.isNotEmpty)
+                    Text(
+                      _place,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 10, color: kInkBrown),
+                    ),
+                  Text(
+                    _date,
+                    maxLines: 1,
+                    style: const TextStyle(fontSize: 9, color: kInkBrown),
+                  ),
+                ],
               ),
             ),
           ],

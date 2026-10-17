@@ -73,7 +73,9 @@ class _BookletPageState extends State<BookletPage> {
               padding: const EdgeInsets.only(right: 16),
               child: Center(
                 child: Text(
-                  booklet == null ? '' : 'Page ${_book.page + 1}',
+                  booklet == null
+                      ? ''
+                      : (_book.page == 0 ? 'Cover' : 'Page ${_book.page}'),
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
               ),

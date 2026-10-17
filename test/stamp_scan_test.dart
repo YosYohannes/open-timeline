@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:open_timeline/store/journal_store.dart';
 import 'package:open_timeline/ui/app/store_scope.dart';
 import 'package:open_timeline/ui/post/post_page.dart';
+import 'package:open_timeline/ui/stamp/crop_page.dart';
 import 'package:open_timeline/ui/stamp/stamp_scan.dart';
 
 import 'map_test_support.dart';
@@ -87,6 +88,22 @@ void main() {
     if (settle) await tester.pumpAndSettle();
   }
 
+  Future<void> settleReal(WidgetTester tester, {int rounds = 30}) async {
+    for (var i = 0; i < rounds; i++) {
+      await tester.runAsync(
+        () => Future<void>.delayed(const Duration(milliseconds: 50)),
+      );
+      await tester.pump();
+    }
+    await tester.pumpAndSettle();
+  }
+
+  Future<void> useCrop(WidgetTester tester) async {
+    expect(find.text('Use crop'), findsOneWidget);
+    await tester.runAsync(() => tester.tap(find.text('Use crop')));
+    await settleReal(tester);
+  }
+
   Finder field(String hint) => find.byWidgetPredicate(
     (w) => w is TextField && w.decoration?.hintText == hint,
   );
@@ -96,9 +113,10 @@ void main() {
   ) async {
     late FakeScanner scanner;
     await open(tester, (d) => scanner = FakeScanner(d));
+    expect(find.text('Crop the stamp'), findsOneWidget);
+    await useCrop(tester);
     expect(find.text('New stamp'), findsOneWidget);
     expect(find.text('Photos & videos'), findsNothing);
-    expect(scanner.scanned.single.existsSync(), isFalse);
 
     await tester.enterText(field('Stamp name'), '京都駅');
     await tester.enterText(
@@ -134,26 +152,70 @@ void main() {
     expect(saved.media, hasLength(1));
     expect(store.mediaFile(saved, saved.media.first).existsSync(), isTrue);
     expect(store.dirtyIds, contains(saved.id));
+
+    expect(find.text('Crop another stamp'), findsOneWidget);
+    expect(
+      find.text('1 stamp saved. Crop another, or tap Done.'),
+      findsOneWidget,
+    );
+    await tester.runAsync(() => tester.tap(find.text('Done')));
+    await settleReal(tester, rounds: 10);
+    expect(find.byType(CropPage), findsNothing);
+    expect(scanner.scanned.single.existsSync(), isFalse);
+  });
+
+  testWidgets('several stamps can be cropped from one scanned page', (
+    tester,
+  ) async {
+    await open(tester, (d) => FakeScanner(d));
+    for (var n = 1; n <= 2; n++) {
+      await useCrop(tester);
+      await tester.enterText(field('Stamp name'), 'stamp $n');
+      await tester.pump();
+      await tester.runAsync(
+        () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
+      );
+      await settleReal(tester, rounds: 40);
+    }
+    expect(store.entries.map((e) => e.title).toSet(), {'stamp 1', 'stamp 2'});
+    expect(
+      find.text('2 stamps saved. Crop another, or tap Done.'),
+      findsOneWidget,
+    );
+  });
+
+  testWidgets('cancelling the crop files nothing and drops the scan', (
+    tester,
+  ) async {
+    late FakeScanner scanner;
+    await open(tester, (d) => scanner = FakeScanner(d));
+    await tester.runAsync(() => tester.tap(find.text('Cancel')));
+    await settleReal(tester, rounds: 10);
+    expect(find.byType(CropPage), findsNothing);
+    expect(store.entries, isEmpty);
+    expect(scanner.scanned.single.existsSync(), isFalse);
   });
 
   testWidgets('discarding a new stamp removes its scanned image', (
     tester,
   ) async {
     await open(tester, (d) => FakeScanner(d));
+    await useCrop(tester);
     await tester.enterText(field('Stamp name'), 'x');
     await tester.pump();
     final year = Directory(store.root.path)
         .listSync()
         .whereType<Directory>()
         .single;
-    expect(year.listSync().where((f) => f.path.endsWith('.jpg')), hasLength(1));
+    expect(year.listSync().where((f) => f.path.endsWith('.png')), hasLength(1));
 
     await tester.tap(find.byType(CloseButton));
     await tester.pumpAndSettle();
     await tester.runAsync(() => tester.tap(find.text('Discard')));
-    await tester.pumpAndSettle();
+    await settleReal(tester, rounds: 10);
     expect(find.byType(PostPage), findsNothing);
-    expect(year.listSync().where((f) => f.path.endsWith('.jpg')), isEmpty);
+    expect(year.listSync().where((f) => f.path.endsWith('.png')), isEmpty);
+    expect(find.text('Crop the stamp'), findsOneWidget);
     expect(store.entries, isEmpty);
   });
 
@@ -187,6 +249,8 @@ void main() {
       }
       await tester.pumpAndSettle();
       expect(scanner.picked, [false]);
+      expect(find.text('Crop the stamp'), findsOneWidget);
+      await useCrop(tester);
       expect(find.text('New stamp'), findsOneWidget);
     },
   );

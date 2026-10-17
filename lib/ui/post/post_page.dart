@@ -205,7 +205,7 @@ class _PostPageState extends State<PostPage> {
       if (raced) {
         showSnack(context, 'Merged with changes synced while you were editing');
       }
-      navigator.pop();
+      navigator.pop(true);
     } catch (err) {
       if (mounted) {
         setState(() => _saving = false);
@@ -350,15 +350,22 @@ class _PostPageState extends State<PostPage> {
         widget.scanner ?? PlatformStampScanner(),
       );
       if (file == null) return;
+      if (!mounted) return;
+      final crop = await cropFromPage(Navigator.of(context), file);
       try {
-        final name = await _store.importMedia(_original, file);
+        await file.delete();
+      } catch (_) {}
+      if (crop == null) return;
+      final cropped = crop;
+      try {
+        final name = await _store.importMedia(_original, cropped);
         final old = _media.toList();
         _imported.add(name);
         if (mounted) setState(() => _media = [name]);
         _deleteFiles(old.where(_imported.contains));
       } finally {
         try {
-          await file.delete();
+          await cropped.delete();
         } catch (_) {}
       }
     } catch (e) {

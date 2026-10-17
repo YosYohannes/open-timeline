@@ -8,6 +8,7 @@ import '../../models/entry.dart';
 import '../app/store_scope.dart';
 import '../post/post_page.dart';
 import '../widgets/snack.dart';
+import 'crop_page.dart';
 
 abstract class StampScanner {
   Future<File?> scan();
@@ -86,6 +87,30 @@ Future<File?> scanWithMessage(
   }
 }
 
+Future<File?> cropFromPage(
+  NavigatorState navigator,
+  File page, {
+  int saved = 0,
+}) async {
+  final bytes = await navigator.push<Uint8List>(
+    MaterialPageRoute(
+      builder: (_) => CropPage(file: page, saved: saved),
+    ),
+  );
+  if (bytes == null) return null;
+  final out = File(
+    '${page.parent.path}/crop-${DateTime.now().microsecondsSinceEpoch}.png',
+  );
+  await out.writeAsBytes(bytes);
+  return out;
+}
+
+Future<void> _discard(File file) async {
+  try {
+    await file.delete();
+  } catch (_) {}
+}
+
 Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
   final store = StoreScope.read(context);
   final me = store.settings.me.trim();
@@ -94,31 +119,39 @@ Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
     return;
   }
   final navigator = Navigator.of(context);
-  final file = await scanWithMessage(
+  final page = await scanWithMessage(
     context,
     scanner ?? PlatformStampScanner(),
   );
-  if (file == null) return;
-  final base = Entry.create(
-    author: me,
-    kind: kindStamp,
-  ).copyWith(color: store.settings.myColor);
-  final String name;
+  if (page == null) return;
   try {
-    name = await store.importMedia(base, file);
+    var saved = 0;
+    while (true) {
+      final crop = await cropFromPage(navigator, page, saved: saved);
+      if (crop == null) break;
+      final base = Entry.create(
+        author: me,
+        kind: kindStamp,
+      ).copyWith(color: store.settings.myColor);
+      final String name;
+      try {
+        name = await store.importMedia(base, crop);
+      } finally {
+        await _discard(crop);
+      }
+      final filed = await navigator.push<bool>(
+        MaterialPageRoute<bool>(
+          builder: (_) => PostPage(
+            entry: base.copyWith(media: [name]),
+            isNew: true,
+            scanner: scanner,
+          ),
+          fullscreenDialog: true,
+        ),
+      );
+      if (filed == true) saved++;
+    }
   } finally {
-    try {
-      await file.delete();
-    } catch (_) {}
+    await _discard(page);
   }
-  await navigator.push(
-    MaterialPageRoute<void>(
-      builder: (_) => PostPage(
-        entry: base.copyWith(media: [name]),
-        isNew: true,
-        scanner: scanner,
-      ),
-      fullscreenDialog: true,
-    ),
-  );
 }

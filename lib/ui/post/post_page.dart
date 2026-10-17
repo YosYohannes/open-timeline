@@ -401,7 +401,7 @@ class _PostPageState extends State<PostPage> {
       );
       if (file == null) return;
       if (!mounted) return;
-      final crop = await cropFromPage(Navigator.of(context), file);
+      final crop = (await cropFromPage(Navigator.of(context), file)).crop;
       try {
         await file.delete();
       } catch (_) {}

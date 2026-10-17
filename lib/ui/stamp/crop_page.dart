@@ -70,6 +70,11 @@ Future<Uint8List> cropToPng(ui.Image image, Rect area) async {
   return data!.buffer.asUint8List();
 }
 
+/// Popped from the crop screen to scan another page with the same event.
+class AnotherPage {
+  const AnotherPage();
+}
+
 class CropPage extends StatefulWidget {
   const CropPage({super.key, required this.file, this.saved = 0});
 
@@ -189,8 +194,8 @@ class _CropPageState extends State<CropPage> {
                     saved == 0
                         ? 'Drag the corners to frame one stamp. A page with several stamps can be cropped one at a time.'
                         : saved == 1
-                        ? '1 stamp saved. Crop another, or tap Done.'
-                        : '$saved stamps saved. Crop another, or tap Done.',
+                        ? '1 stamp saved. Crop another, scan another page, or tap Done.'
+                        : '$saved stamps saved. Crop another, scan another page, or tap Done.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall,
                   ),
@@ -200,6 +205,16 @@ class _CropPageState extends State<CropPage> {
                       style: TextStyle(color: theme.colorScheme.error),
                     ),
                   const SizedBox(height: 4),
+                  if (saved > 0)
+                    TextButton.icon(
+                      key: const ValueKey('another-page'),
+                      onPressed: _busy
+                          ? null
+                          : () =>
+                                Navigator.of(context).pop(const AnotherPage()),
+                      icon: const Icon(Icons.document_scanner_outlined),
+                      label: const Text('Scan another page'),
+                    ),
                   FilterChip(
                     key: const ValueKey('square'),
                     avatar: const Icon(Icons.crop_square, size: 18),

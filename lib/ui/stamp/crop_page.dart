@@ -21,6 +21,39 @@ Rect clampCrop(Rect r, Size image) {
   return Rect.fromLTRB(left, top, right, bottom);
 }
 
+Rect makeSquare(Rect r, Size image) {
+  final side = math.min(
+    math.min(r.width, r.height),
+    math.min(image.width, image.height),
+  );
+  final c = r.center;
+  final left = (c.dx - side / 2).clamp(0.0, image.width - side);
+  final top = (c.dy - side / 2).clamp(0.0, image.height - side);
+  return Rect.fromLTWH(left, top, side, side);
+}
+
+Rect squareFromCorner({
+  required Offset anchor,
+  required Offset moved,
+  required Size image,
+}) {
+  final sx = moved.dx >= anchor.dx ? 1.0 : -1.0;
+  final sy = moved.dy >= anchor.dy ? 1.0 : -1.0;
+  final room = math.min(
+    sx > 0 ? image.width - anchor.dx : anchor.dx,
+    sy > 0 ? image.height - anchor.dy : anchor.dy,
+  );
+  final wanted = math.max(
+    (moved.dx - anchor.dx).abs(),
+    (moved.dy - anchor.dy).abs(),
+  );
+  final side = wanted.clamp(math.min(_minSide, room), room);
+  return Rect.fromPoints(
+    anchor,
+    Offset(anchor.dx + sx * side, anchor.dy + sy * side),
+  );
+}
+
 Future<Uint8List> cropToPng(ui.Image image, Rect area) async {
   final w = area.width.round();
   final h = area.height.round();
@@ -51,6 +84,7 @@ class _CropPageState extends State<CropPage> {
   ui.Image? _image;
   Rect _crop = Rect.zero;
   bool _busy = false;
+  bool _square = false;
   String? _error;
 
   @override
@@ -140,6 +174,7 @@ class _CropPageState extends State<CropPage> {
                 : _CropArea(
                     image: _image!,
                     crop: _crop,
+                    square: _square,
                     onChanged: (r) => setState(() => _crop = r),
                   ),
           ),
@@ -164,15 +199,32 @@ class _CropPageState extends State<CropPage> {
                       _error!,
                       style: TextStyle(color: theme.colorScheme.error),
                     ),
-                  const SizedBox(height: 8),
+                  const SizedBox(height: 4),
+                  FilterChip(
+                    key: const ValueKey('square'),
+                    avatar: const Icon(Icons.crop_square, size: 18),
+                    label: const Text('Square 1:1'),
+                    selected: _square,
+                    onSelected: _image == null || _busy
+                        ? null
+                        : (v) => setState(() {
+                            _square = v;
+                            if (v) _crop = makeSquare(_crop, _size);
+                          }),
+                  ),
+                  const SizedBox(height: 4),
                   Row(
                     children: [
                       Expanded(
                         child: OutlinedButton(
                           onPressed: _image == null || _busy
                               ? null
-                              : () =>
-                                    setState(() => _crop = Offset.zero & _size),
+                              : () => setState(() {
+                                  final all = Offset.zero & _size;
+                                  _crop = _square
+                                      ? makeSquare(all, _size)
+                                      : all;
+                                }),
                           child: const Text('Whole page'),
                         ),
                       ),
@@ -201,11 +253,13 @@ class _CropArea extends StatefulWidget {
   const _CropArea({
     required this.image,
     required this.crop,
+    required this.square,
     required this.onChanged,
   });
 
   final ui.Image image;
   final Rect crop;
+  final bool square;
   final ValueChanged<Rect> onChanged;
 
   @override
@@ -285,7 +339,31 @@ class _CropAreaState extends State<_CropArea> {
             ),
             _Drag.none => r,
           };
-          if (_drag == _Drag.move) {
+          if (widget.square &&
+              (_drag == _Drag.tl ||
+                  _drag == _Drag.tr ||
+                  _drag == _Drag.bl ||
+                  _drag == _Drag.br)) {
+            final anchor = switch (_drag) {
+              _Drag.tl => r.bottomRight,
+              _Drag.tr => r.bottomLeft,
+              _Drag.bl => r.topRight,
+              _ => r.topLeft,
+            };
+            final moved = switch (_drag) {
+              _Drag.tl => r.topLeft,
+              _Drag.tr => r.topRight,
+              _Drag.bl => r.bottomLeft,
+              _ => r.bottomRight,
+            };
+            widget.onChanged(
+              squareFromCorner(
+                anchor: anchor,
+                moved: moved + d,
+                image: _imageSize,
+              ),
+            );
+          } else if (_drag == _Drag.move) {
             final w = r.width;
             final h = r.height;
             final left = next.left.clamp(0.0, _imageSize.width - w);

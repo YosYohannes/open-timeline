@@ -4,16 +4,23 @@ import 'package:intl/intl.dart';
 import '../../store/journal_store.dart';
 import '../../sync/google_auth.dart';
 import '../../sync/sync_service.dart';
+import '../../update/update_check.dart';
 import '../app/store_scope.dart';
 import 'account_actions.dart';
 import 'author_colors.dart';
 import 'tags_page.dart';
 
 class SettingsPage extends StatefulWidget {
-  const SettingsPage({super.key, required this.auth, required this.sync});
+  const SettingsPage({
+    super.key,
+    required this.auth,
+    required this.sync,
+    this.platform,
+  });
 
   final AuthService auth;
   final SyncService sync;
+  final AppPlatform? platform;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -27,10 +34,14 @@ class _SettingsPageState extends State<SettingsPage> {
   late bool _editingFolder;
   final _emailFocus = FocusNode();
   bool _authBusy = false;
+  String? _version;
 
   @override
   void initState() {
     super.initState();
+    (widget.platform ?? PlatformApp()).installedVersion().then((v) {
+      if (mounted) setState(() => _version = v);
+    });
     _store = StoreScope.read(context);
     final s = _store.settings;
     _email = TextEditingController(text: s.me);
@@ -287,6 +298,13 @@ class _SettingsPageState extends State<SettingsPage> {
             ),
             const SizedBox(height: 24),
             _section(theme, 'Updates'),
+            if (_version != null)
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: const Icon(Icons.info_outline),
+                title: const Text('Version'),
+                subtitle: Text(_version!),
+              ),
             SwitchListTile(
               contentPadding: EdgeInsets.zero,
               title: const Text('Check for a new version'),

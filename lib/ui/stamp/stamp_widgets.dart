@@ -17,11 +17,16 @@ class StampTile extends StatelessWidget {
     final theme = Theme.of(context);
     final store = StoreScope.read(context);
     final image = entry.media.where(isImage).firstOrNull;
-    final place = placeText(entry);
+    final place = entry.place?.trim() ?? '';
+    final heading = [
+      entry.title.trim(),
+      place,
+      entry.series,
+    ].firstWhere((t) => t.isNotEmpty, orElse: () => 'Stamp');
     final detail = [
-      if (entry.series.isNotEmpty) entry.series,
-      ?place,
-    ].join(' · ');
+      entry.series,
+      place,
+    ].where((t) => t.isNotEmpty && t != heading).join(' · ');
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
       elevation: 0,
@@ -48,7 +53,7 @@ class StampTile extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      entry.title.isEmpty ? 'Stamp' : entry.title,
+                      heading,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                       style: theme.textTheme.titleMedium,
@@ -99,7 +104,11 @@ class StampStrip extends StatelessWidget {
     final theme = Theme.of(context);
     final store = StoreScope.read(context);
     final names = stamps
-        .map((e) => e.title.trim())
+        .map(
+          (e) => e.title.trim().isNotEmpty
+              ? e.title.trim()
+              : e.place?.trim() ?? '',
+        )
         .where((t) => t.isNotEmpty)
         .toList();
     final caption = [

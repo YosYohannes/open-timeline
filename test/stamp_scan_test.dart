@@ -117,16 +117,28 @@ void main() {
     await useCrop(tester);
     expect(find.text('New stamp'), findsOneWidget);
     expect(find.text('Photos & videos'), findsNothing);
+    expect(field('Title (optional)'), findsNothing);
+    expect(field('What happened?'), findsNothing);
+    expect(field('Stamp name'), findsNothing);
 
-    await tester.enterText(field('Stamp name'), '京都駅');
     await tester.enterText(
       find.widgetWithText(TextField, 'Series'),
       'JR West eki',
     );
+    await tester.tap(find.byKey(const ValueKey('location-row')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('country-box')));
+    await tester.pumpAndSettle();
     await tester.enterText(
-      find.widgetWithText(TextField, 'Country code'),
-      'jp',
+      find.widgetWithText(TextField, 'Search countries'),
+      'jap',
     );
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('country-JP')));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('Japan'), findsWidgets);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
     await tester.pump();
 
     await tester.runAsync(
@@ -146,7 +158,8 @@ void main() {
 
     final saved = store.entries.single;
     expect(saved.isStamp, isTrue);
-    expect(saved.title, '京都駅');
+    expect(saved.title, isEmpty);
+    expect(saved.text, isEmpty);
     expect(saved.series, 'JR West eki');
     expect(saved.country, 'JP');
     expect(saved.media, hasLength(1));
@@ -170,14 +183,20 @@ void main() {
     await open(tester, (d) => FakeScanner(d));
     for (var n = 1; n <= 2; n++) {
       await useCrop(tester);
-      await tester.enterText(field('Stamp name'), 'stamp $n');
+      await tester.enterText(
+        find.widgetWithText(TextField, 'Series'),
+        'series $n',
+      );
       await tester.pump();
       await tester.runAsync(
         () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
       );
       await settleReal(tester, rounds: 40);
     }
-    expect(store.entries.map((e) => e.title).toSet(), {'stamp 1', 'stamp 2'});
+    expect(store.entries.map((e) => e.series).toSet(), {
+      'series 1',
+      'series 2',
+    });
     expect(
       find.text('2 stamps saved. Crop another, or tap Done.'),
       findsOneWidget,
@@ -201,7 +220,7 @@ void main() {
   ) async {
     await open(tester, (d) => FakeScanner(d));
     await useCrop(tester);
-    await tester.enterText(field('Stamp name'), 'x');
+    await tester.enterText(find.widgetWithText(TextField, 'Series'), 'x');
     await tester.pump();
     final year = Directory(store.root.path)
         .listSync()

@@ -10,15 +10,16 @@ import 'package:latlong2/latlong.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../models/entry.dart';
+import '../../models/countries.dart';
 import '../../models/entry_format.dart';
 import '../../models/tag.dart';
 import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../stamp/country_picker.dart';
 import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
-import '../widgets/author.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
 import '../widgets/snack.dart';
@@ -58,12 +59,13 @@ class _PostPageState extends State<PostPage> {
   late final TextEditingController _text;
   late final TextEditingController _place;
   late final TextEditingController _series;
-  late final TextEditingController _country;
   final _tagInput = TextEditingController();
   final _tagFocus = FocusNode();
   final _tagFieldKey = GlobalKey();
   late List<String> _tags;
   late List<String> _media;
+  final _rev = ValueNotifier<int>(0);
+  String? _countryCode;
 
   final List<String> _imported = [];
 
@@ -86,9 +88,9 @@ class _PostPageState extends State<PostPage> {
     _text = TextEditingController(text: e.text)..addListener(_changed);
     _place = TextEditingController(text: e.place ?? '')..addListener(_changed);
     _series = TextEditingController(text: e.series)..addListener(_changed);
-    _country = TextEditingController(text: e.country ?? '')
-      ..addListener(_changed);
+    _countryCode = e.country;
     _tagInput.addListener(_changed);
+    _tagFocus.addListener(_changed);
     _tags = [...e.tags];
     _media = [...e.media];
     if (widget.isNew && _isStamp) _imported.addAll(e.media);
@@ -99,11 +101,17 @@ class _PostPageState extends State<PostPage> {
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _rev.value++;
+  }
+
+  @override
   void dispose() {
+    _rev.dispose();
     _text.dispose();
     _place.dispose();
     _series.dispose();
-    _country.dispose();
     _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
@@ -131,11 +139,6 @@ class _PostPageState extends State<PostPage> {
         _tagInput.text.trim().isNotEmpty ||
         !listEquals(_tags, o.tags) ||
         !listEquals(_media, o.media);
-  }
-
-  String? get _countryCode {
-    final c = _country.text.trim().toUpperCase();
-    return c.isEmpty ? null : c;
   }
 
   bool get _isMine =>
@@ -325,20 +328,49 @@ class _PostPageState extends State<PostPage> {
       _lat = lat;
       _lon = lon;
     });
-    if (_isStamp) _fillCountry(lat, lon);
   }
 
-  Future<void> _fillCountry(double lat, double lon) async {
-    if (_country.text.trim().isNotEmpty) return;
-    try {
-      final marks = await _geocoding
-          .placemarkFromCoordinates(lat, lon)
-          .timeout(const Duration(seconds: 8));
-      final code = marks.firstOrNull?.isoCountryCode;
-      if (mounted && code != null && _country.text.trim().isEmpty) {
-        _country.text = code;
-      }
-    } catch (_) {}
+  void _applyCountry(({String? label, String? iso})? found) {
+    if (!mounted) return;
+    final iso = found?.iso;
+    if (isKnownCountry(iso)) {
+      setState(() => _countryCode = iso);
+    } else {
+      _snack("Couldn't work out the country. Choose it from the list.");
+    }
+  }
+
+  Future<void> _pickCountry() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showCountryPicker(
+      context,
+      selected: _countryCode,
+      used: _store.usedCountries,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _countryCode = picked.code);
+  }
+
+  Widget _countryBox() {
+    final code = _countryCode;
+    return InkWell(
+      key: const ValueKey('country-box'),
+      borderRadius: kBorderRadius,
+      onTap: _pickCountry,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Country',
+          border: OutlineInputBorder(),
+          isDense: true,
+          suffixIcon: Icon(Icons.arrow_drop_down),
+        ),
+        child: Text(
+          code == null ? 'Not set' : countryLabel(code),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
   }
 
   Future<void> _rescan() async {
@@ -380,6 +412,7 @@ class _PostPageState extends State<PostPage> {
       _lat = null;
       _lon = null;
       _place.clear();
+      _countryCode = null;
     });
   }
 
@@ -408,8 +441,11 @@ class _PostPageState extends State<PostPage> {
       ).timeout(const Duration(seconds: 25));
       if (!mounted) return;
       _setLocation(pos.latitude, pos.longitude);
-      final label = await _reverseGeocode(pos.latitude, pos.longitude);
-      if (mounted && label != null) _place.text = label;
+      final found = await _lookup(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      final label = found?.label;
+      if (label != null) _place.text = label;
+      _applyCountry(found);
     } catch (e) {
       _snack("Couldn't get your location: ${_short(e)}");
     } finally {
@@ -433,8 +469,10 @@ class _PostPageState extends State<PostPage> {
         return;
       }
       if (!mounted) return;
-      _setLocation(results.first.latitude, results.first.longitude);
+      final spot = results.first;
+      _setLocation(spot.latitude, spot.longitude);
       _place.text = query.trim();
+      _applyCountry(await _lookup(spot.latitude, spot.longitude));
     } catch (e) {
       _snack("Couldn't find that place (${_short(e)})");
     } finally {
@@ -445,51 +483,54 @@ class _PostPageState extends State<PostPage> {
   Future<void> _onMapTap(LatLng p) async {
     FocusManager.instance.primaryFocus?.unfocus();
     _setLocation(p.latitude, p.longitude);
-    if (_place.text.trim().isNotEmpty) return;
-    final label = await _reverseGeocode(p.latitude, p.longitude);
-    if (mounted &&
-        label != null &&
-        _place.text.trim().isEmpty &&
-        _lat == p.latitude &&
-        _lon == p.longitude) {
-      _place.text = label;
-    }
+    final found = await _lookup(p.latitude, p.longitude);
+    if (!mounted || _lat != p.latitude || _lon != p.longitude) return;
+    final label = found?.label;
+    if (label != null && _place.text.trim().isEmpty) _place.text = label;
+    _applyCountry(found);
   }
 
   /// Null when no geocoder is available.
-  Future<String?> _reverseGeocode(double lat, double lon) async {
+  Future<({String? label, String? iso})?> _lookup(
+    double lat,
+    double lon,
+  ) async {
     try {
       final marks = await _geocoding
           .placemarkFromCoordinates(lat, lon)
           .timeout(const Duration(seconds: 8));
       if (marks.isEmpty) return null;
       final p = marks.first;
-      final parts = <String>[];
-      for (final s in [p.street, p.locality]) {
-        final t = s?.trim() ?? '';
-        if (t.isNotEmpty &&
-            !parts.any((x) => x.toLowerCase().contains(t.toLowerCase()))) {
-          parts.add(t);
-        }
-      }
-      if (parts.isEmpty) {
-        for (final s in [
-          p.name,
-          p.subLocality,
-          p.administrativeArea,
-          p.country,
-        ]) {
-          final t = s?.trim() ?? '';
-          if (t.isNotEmpty) {
-            parts.add(t);
-            break;
-          }
-        }
-      }
-      return parts.isEmpty ? null : parts.join(', ');
+      return (label: _labelOf(p), iso: p.isoCountryCode?.toUpperCase());
     } catch (_) {
       return null;
     }
+  }
+
+  static String? _labelOf(Placemark p) {
+    final parts = <String>[];
+    for (final s in [p.street, p.locality]) {
+      final t = s?.trim() ?? '';
+      if (t.isNotEmpty &&
+          !parts.any((x) => x.toLowerCase().contains(t.toLowerCase()))) {
+        parts.add(t);
+      }
+    }
+    if (parts.isEmpty) {
+      for (final s in [
+        p.name,
+        p.subLocality,
+        p.administrativeArea,
+        p.country,
+      ]) {
+        final t = s?.trim() ?? '';
+        if (t.isNotEmpty) {
+          parts.add(t);
+          break;
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts.join(', ');
   }
 
   void _addTag(String raw) {
@@ -638,8 +679,6 @@ class _PostPageState extends State<PostPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final placeText = _place.text.trim();
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -687,22 +726,6 @@ class _PostPageState extends State<PostPage> {
                 _conflictBanner(theme),
                 const SizedBox(height: 16),
               ],
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    AuthorDot(author: _original.author, size: 12),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _original.author,
-                        style: theme.textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
               if (_isStamp) ...[
                 _stampPreview(theme),
                 const SizedBox(height: 16),
@@ -724,18 +747,6 @@ class _PostPageState extends State<PostPage> {
                 ],
               ),
               const SizedBox(height: 16),
-
-              TextField(
-                controller: _title,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                decoration: InputDecoration(
-                  hintText: _isStamp ? 'Stamp name' : 'Title (optional)',
-                  border: const OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-
               if (_isStamp) ...[
                 TextField(
                   controller: _series,
@@ -750,224 +761,327 @@ class _PostPageState extends State<PostPage> {
                   ),
                 ),
                 _seriesSuggestions(),
+              ] else ...[
+                TextField(
+                  controller: _title,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    hintText: 'Title (optional)',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
                 const SizedBox(height: 12),
                 TextField(
-                  controller: _country,
-                  textCapitalization: TextCapitalization.characters,
-                  maxLength: 2,
+                  controller: _text,
+                  minLines: 5,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
-                    labelText: 'Country code',
-                    hintText: 'JP, TW … filled in from the location',
-                    prefixIcon: Icon(Icons.public),
+                    hintText: 'What happened?',
                     border: OutlineInputBorder(),
-                    isDense: true,
-                    counterText: '',
+                    alignLabelWithHint: true,
                   ),
                 ),
                 const SizedBox(height: 12),
+                _mediaStrip(),
               ],
-
-              TextField(
-                controller: _text,
-                minLines: _isStamp ? 3 : 6,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: InputDecoration(
-                  hintText: _isStamp ? 'Notes (optional)' : 'What happened?',
-                  border: const OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              _sectionTitle(theme, 'Location'),
-              if (_hasLocation || placeText.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.place, size: 20, color: scheme.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          [
-                            if (placeText.isNotEmpty) placeText,
-                            if (_hasLocation) '(${formatCoords(_lat!, _lon!)})',
-                          ].join(' '),
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              TextField(
-                controller: _place,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Place label',
-                  hintText: 'e.g. Scheveningen beach',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ActionRow(
-                items: [
-                  ActionItem(
-                    icon: Icons.my_location,
-                    label: 'Current',
-                    onPressed: _locBusy ? null : _useCurrentLocation,
-                  ),
-                  ActionItem(
-                    icon: Icons.search,
-                    label: 'Search',
-                    onPressed: _locBusy ? null : _searchPlace,
-                  ),
-                  if (_hasLocation || placeText.isNotEmpty)
-                    ActionItem(
-                      icon: Icons.location_off_outlined,
-                      label: 'Clear',
-                      onPressed: _clearLocation,
-                    ),
-                ],
-              ),
-              if (_locBusy)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(),
-                ),
               const SizedBox(height: 12),
-              LocationMap(
-                point: _hasLocation ? LatLng(_lat!, _lon!) : null,
-                author: _original.author,
-                fallbackCenter: _mapFallback,
-                onTap: _onMapTap,
-              ),
-              const SizedBox(height: 20),
-
-              _sectionTitle(theme, 'Tags'),
-              if (_tags.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final t in _tags)
-                        InputChip(
-                          label: Text('#$t'),
-                          onDeleted: () =>
-                              setState(() => _tags = [..._tags]..remove(t)),
-                        ),
-                    ],
-                  ),
-                ),
-              TextField(
-                key: _tagFieldKey,
-                controller: _tagInput,
-                focusNode: _tagFocus,
-                textInputAction: TextInputAction.done,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Add a tag',
-                  hintText: 'Type, then press enter or comma',
-                  prefixIcon: Icon(Icons.sell_outlined),
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: _onTagInputChanged,
-                onSubmitted: (_) {
-                  _commitTagInput();
-                  _tagFocus.requestFocus();
-                  _revealTagField();
-                },
-              ),
-              _tagSuggestions(),
-              const SizedBox(height: 20),
-
-              if (!_isStamp) ...[
-                _sectionTitle(theme, 'Photos & videos'),
-                ActionRow(
-                  items: [
-                    ActionItem(
-                      icon: Icons.photo_camera_outlined,
-                      label: 'Photo',
-                      onPressed: _mediaBusy ? null : _addPhoto,
-                    ),
-                    ActionItem(
-                      icon: Icons.videocam_outlined,
-                      label: 'Video',
-                      onPressed: _mediaBusy ? null : _addVideo,
-                    ),
-                    ActionItem(
-                      icon: Icons.photo_library_outlined,
-                      label: 'Gallery',
-                      onPressed: _mediaBusy ? null : _addFromGallery,
-                    ),
-                  ],
-                ),
-                if (_mediaBusy)
-                  const Padding(
-                    padding: EdgeInsets.only(top: 8),
-                    child: LinearProgressIndicator(),
-                  ),
-                if (_media.isNotEmpty) ...[
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    runSpacing: 8,
-                    children: [
-                      for (final m in _media)
-                        SizedBox(
-                          width: 104,
-                          height: 104,
-                          child: Stack(
-                            children: [
-                              MediaTile(
-                                file: _store.mediaFile(_original, m),
-                                name: m,
-                                size: 104,
-                                radius: kRadius,
-                                onTap: () => _openMedia(m),
-                              ),
-                              Positioned(
-                                top: 2,
-                                right: 2,
-                                child: Material(
-                                  color: Colors.black54,
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: kBorderRadius,
-                                  ),
-                                  child: InkWell(
-                                    customBorder: RoundedRectangleBorder(
-                                      borderRadius: kBorderRadius,
-                                    ),
-                                    onTap: () => setState(
-                                      () => _media = [..._media]..remove(m),
-                                    ),
-                                    child: const Padding(
-                                      padding: EdgeInsets.all(4),
-                                      child: Icon(
-                                        Icons.close,
-                                        size: 16,
-                                        color: Colors.white,
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                ],
-              ],
+              _locationRow(theme),
+              const SizedBox(height: 12),
+              _tagsBlock(),
             ],
           ),
         ),
       ),
+    );
+  }
+
+  Widget _mediaStrip() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final m in _media)
+              SizedBox(
+                width: 88,
+                height: 88,
+                child: Stack(
+                  children: [
+                    MediaTile(
+                      file: _store.mediaFile(_original, m),
+                      name: m,
+                      size: 88,
+                      radius: kRadius,
+                      onTap: () => _openMedia(m),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: kBorderRadius,
+                        ),
+                        child: InkWell(
+                          customBorder: RoundedRectangleBorder(
+                            borderRadius: kBorderRadius,
+                          ),
+                          onTap: () =>
+                              setState(() => _media = [..._media]..remove(m)),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            SizedBox(
+              width: 88,
+              height: 88,
+              child: OutlinedButton(
+                key: const ValueKey('add-media'),
+                style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                onPressed: _mediaBusy ? null : _showAddMedia,
+                child: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+            ),
+          ],
+        ),
+        if (_mediaBusy)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+      ],
+    );
+  }
+
+  void _showAddMedia() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Photo'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addPhoto();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Video'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addVideo();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addFromGallery();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _locationRow(ThemeData theme) {
+    final place = _place.text.trim();
+    final code = _countryCode;
+    final label = place.isNotEmpty
+        ? place
+        : (_hasLocation ? formatCoords(_lat!, _lon!) : '');
+    final empty = label.isEmpty && code == null;
+    return InkWell(
+      key: const ValueKey('location-row'),
+      borderRadius: kBorderRadius,
+      onTap: _openLocationSheet,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.place_outlined),
+          suffixIcon: Icon(Icons.chevron_right),
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        child: empty
+            ? Text('Add location', style: TextStyle(color: theme.hintColor))
+            : Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label.isEmpty ? countryName(code!) : label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (code != null && label.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text('${countryFlag(code)} $code'),
+                  ],
+                ],
+              ),
+      ),
+    );
+  }
+
+  Future<void> _openLocationSheet() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => ListenableBuilder(
+        listenable: Listenable.merge([_rev, _place]),
+        builder: (ctx, _) => _locationSheet(ctx),
+      ),
+    );
+  }
+
+  Widget _locationSheet(BuildContext ctx) {
+    final hasAny =
+        _hasLocation || _place.text.trim().isNotEmpty || _countryCode != null;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          16 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: TextField(
+                    controller: _place,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Place label',
+                      hintText: 'e.g. Scheveningen beach',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(flex: 4, child: _countryBox()),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ActionRow(
+              items: [
+                ActionItem(
+                  icon: Icons.my_location,
+                  label: 'Current',
+                  onPressed: _locBusy ? null : _useCurrentLocation,
+                ),
+                ActionItem(
+                  icon: Icons.search,
+                  label: 'Search',
+                  onPressed: _locBusy ? null : _searchPlace,
+                ),
+                if (hasAny)
+                  ActionItem(
+                    icon: Icons.location_off_outlined,
+                    label: 'Clear',
+                    onPressed: _clearLocation,
+                  ),
+              ],
+            ),
+            if (_locBusy)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(),
+              ),
+            const SizedBox(height: 12),
+            LocationMap(
+              point: _hasLocation ? LatLng(_lat!, _lon!) : null,
+              author: _original.author,
+              fallbackCenter: _mapFallback,
+              onTap: _onMapTap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tagsBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final t in _tags)
+              InputChip(
+                label: Text('#$t'),
+                onDeleted: () => setState(() => _tags = [..._tags]..remove(t)),
+              ),
+            SizedBox(
+              width: 150,
+              child: Row(
+                children: [
+                  const Icon(Icons.sell_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      key: _tagFieldKey,
+                      controller: _tagInput,
+                      focusNode: _tagFocus,
+                      textInputAction: TextInputAction.done,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        hintText: '+ tag',
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onChanged: _onTagInputChanged,
+                      onSubmitted: (_) {
+                        _commitTagInput();
+                        _tagFocus.requestFocus();
+                        _revealTagField();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        _tagSuggestions(),
+      ],
     );
   }
 
@@ -1071,17 +1185,6 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  Widget _sectionTitle(ThemeData theme, String title) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(
-      title,
-      style: theme.textTheme.titleSmall?.copyWith(
-        color: theme.colorScheme.primary,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
-
   Widget _tagSuggestions() {
     final typed = _tagInput.text
         .trim()
@@ -1093,7 +1196,9 @@ class _PostPageState extends State<PostPage> {
         .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
         .take(10)
         .toList();
-    if (suggestions.isEmpty) return const SizedBox.shrink();
+    if (suggestions.isEmpty || !(_tagFocus.hasFocus || typed.isNotEmpty)) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(

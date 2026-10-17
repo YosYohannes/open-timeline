@@ -138,6 +138,48 @@ void main() {
     });
   });
 
+  group('stamp tile', () {
+    late JournalStore store;
+
+    Future<void> show(WidgetTester tester, Entry e) async {
+      await tester.runAsync(() async {
+        store = JournalStore(Directory.systemTemp.createTempSync('stt_'));
+        await store.load();
+      });
+      await tester.pumpWidget(
+        StoreScope(
+          store: store,
+          child: MaterialApp(
+            home: Scaffold(body: StampTile(entry: e)),
+          ),
+        ),
+      );
+    }
+
+    testWidgets('the heading falls back from name to place to series', (
+      tester,
+    ) async {
+      await show(
+        tester,
+        stamp(
+          title: '',
+          series: 'JR West eki',
+        ).copyWith(place: 'Kyoto Station'),
+      );
+      expect(find.text('Kyoto Station'), findsOneWidget);
+      expect(find.text('JR West eki'), findsOneWidget);
+
+      await show(
+        tester,
+        stamp(title: '', series: 'JR West eki').copyWith(place: null),
+      );
+      expect(find.text('JR West eki'), findsOneWidget);
+
+      await show(tester, stamp(title: '', series: '').copyWith(place: null));
+      expect(find.text('Stamp'), findsOneWidget);
+    });
+  });
+
   group('timeline', () {
     late JournalStore store;
 

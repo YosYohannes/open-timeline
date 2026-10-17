@@ -16,11 +16,13 @@ class SettingsPage extends StatefulWidget {
     required this.auth,
     required this.sync,
     this.platform,
+    this.checksForUpdates = true,
   });
 
   final AuthService auth;
   final SyncService sync;
   final AppPlatform? platform;
+  final bool checksForUpdates;
 
   @override
   State<SettingsPage> createState() => _SettingsPageState();
@@ -167,7 +169,7 @@ class _SettingsPageState extends State<SettingsPage> {
             leading: Icon(Icons.login),
             title: Text(
               'Google sign-in not configured yet '
-              '(Web client ID missing in lib/config.dart)',
+              '(GOOGLE_WEB_CLIENT_ID missing in env.json)',
             ),
           );
         } else if (auth.signedIn) {
@@ -305,18 +307,19 @@ class _SettingsPageState extends State<SettingsPage> {
                 title: const Text('Version'),
                 subtitle: Text(_version!),
               ),
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              title: const Text('Check for a new version'),
-              subtitle: const Text('Asks GitHub once when the app opens'),
-              value: _store.settings.checkForUpdates,
-              onChanged: (v) async {
-                await _store.updateSettings(
-                  _store.settings.copyWith(checkForUpdates: v),
-                );
-                if (mounted) setState(() {});
-              },
-            ),
+            if (widget.checksForUpdates)
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: const Text('Check for a new version'),
+                subtitle: const Text('Asks GitHub once when the app opens'),
+                value: _store.settings.checkForUpdates,
+                onChanged: (v) async {
+                  await _store.updateSettings(
+                    _store.settings.copyWith(checkForUpdates: v),
+                  );
+                  if (mounted) setState(() {});
+                },
+              ),
             const SizedBox(height: 24),
             _section(theme, 'This phone'),
             ListTile(

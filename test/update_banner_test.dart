@@ -11,13 +11,17 @@ import 'package:open_timeline/sync/google_auth.dart';
 import 'package:open_timeline/sync/sync_service.dart';
 import 'package:open_timeline/update/update_check.dart';
 
-import 'update_check_test.dart' show FakePlatform;
+import 'update_check_test.dart' show FakePlatform, endpoint;
 
 void main() {
   late JournalStore store;
   late FakePlatform platform;
 
-  Future<void> pumpApp(WidgetTester tester, {bool check = true}) async {
+  Future<void> pumpApp(
+    WidgetTester tester, {
+    bool check = true,
+    bool withUpdater = true,
+  }) async {
     await tester.runAsync(() async {
       store = JournalStore(Directory.systemTemp.createTempSync('update_'));
       await store.load();
@@ -43,7 +47,13 @@ void main() {
         store: store,
         auth: auth,
         sync: SyncService(store, auth),
-        updater: UpdateChecker(platform: platform, client: client),
+        updater: withUpdater
+            ? UpdateChecker(
+                endpoint: endpoint,
+                platform: platform,
+                client: client,
+              )
+            : null,
       ),
     );
     await tester.pumpAndSettle();
@@ -87,5 +97,25 @@ void main() {
     );
     expect(find.text('Version'), findsOneWidget);
     expect(find.text('0.2.0'), findsOneWidget);
+  });
+
+  testWidgets('a copy without an update address has no update switch', (
+    tester,
+  ) async {
+    await pumpApp(tester, withUpdater: false);
+    expect(find.text('Version 0.3.0 is available'), findsNothing);
+    await tester.tap(find.byTooltip('Settings'));
+    await tester.pumpAndSettle();
+    await tester.scrollUntilVisible(
+      find.text('This phone'),
+      300,
+      scrollable: find
+          .descendant(
+            of: find.byType(ListView).last,
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
+    expect(find.text('Check for a new version'), findsNothing);
   });
 }

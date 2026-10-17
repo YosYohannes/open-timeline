@@ -5,6 +5,8 @@ import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:open_timeline/update/update_check.dart';
 
+const endpoint = 'https://example.com/releases/latest';
+
 class FakePlatform implements AppPlatform {
   FakePlatform(this.version);
 
@@ -46,6 +48,7 @@ void main() {
 
   test('a newer release points at its APK', () async {
     final checker = UpdateChecker(
+      endpoint: endpoint,
       platform: FakePlatform('0.2.0'),
       client: release(latest('v0.3.0')),
     );
@@ -57,6 +60,7 @@ void main() {
   test('without an APK the release page is used', () async {
     final body = latest('v0.3.0')..remove('assets');
     final info = await UpdateChecker(
+      endpoint: endpoint,
       platform: FakePlatform('0.2.0'),
       client: release(body),
     ).check();
@@ -65,7 +69,11 @@ void main() {
 
   test('same version, errors and junk all mean no update', () async {
     Future<UpdateInfo?> run(http.Client c, [String? v = '0.2.0']) =>
-        UpdateChecker(platform: FakePlatform(v), client: c).check();
+        UpdateChecker(
+          endpoint: endpoint,
+          platform: FakePlatform(v),
+          client: c,
+        ).check();
     expect(await run(release(latest('v0.2.0'))), isNull);
     expect(await run(release({}, status: 404)), isNull);
     expect(await run(release({'tag_name': 5})), isNull);

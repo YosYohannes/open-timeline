@@ -17,12 +17,12 @@ import '../config.dart';
 class AuthService extends ChangeNotifier {
   AuthService({this.webClientId = kGoogleWebClientId});
 
-  /// OAuth Web client ID (see lib/config.dart).
+  /// OAuth Web client ID (GOOGLE_WEB_CLIENT_ID in env.json).
   final String webClientId;
 
   static const _scope = DriveApi.driveScope;
   static const _notConfigured =
-      'Google sign-in is not set up: kGoogleWebClientId in lib/config.dart is empty.';
+      'Google sign-in is not set up: GOOGLE_WEB_CLIENT_ID in env.json is empty.';
 
   GoogleSignInAccount? _account;
   String? _error;

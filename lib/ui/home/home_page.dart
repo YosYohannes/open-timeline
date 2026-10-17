@@ -156,6 +156,7 @@ class _HomePageState extends State<HomePage> {
           auth: widget.auth,
           sync: widget.sync,
           platform: widget.updater?.platform,
+          checksForUpdates: widget.updater != null,
         ),
       ),
     );

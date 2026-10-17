@@ -77,7 +77,7 @@ class SyncService extends ChangeNotifier {
     try {
       if (webClientId.isEmpty) {
         result = SyncResult.failed(
-          'Google sign-in is not set up: kGoogleWebClientId in lib/config.dart is empty.',
+          'Google sign-in is not set up: GOOGLE_WEB_CLIENT_ID in env.json is empty.',
         );
       } else if (!auth.signedIn) {
         result = SyncResult.failed(

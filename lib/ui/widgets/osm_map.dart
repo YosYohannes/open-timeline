@@ -1,13 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 
+import '../../config.dart';
 import '../app/theme.dart';
 
 const osmTileUrl = 'https://tile.openstreetmap.org/{z}/{x}/{y}.png';
-const osmUserAgent = 'com.opentimeline.open_timeline';
 
 TileLayer osmTileLayer() =>
-    TileLayer(urlTemplate: osmTileUrl, userAgentPackageName: osmUserAgent);
+    TileLayer(urlTemplate: osmTileUrl, userAgentPackageName: kAppId);
 
 class OsmAttribution extends StatelessWidget {
   const OsmAttribution({super.key, this.fontSize = 11});

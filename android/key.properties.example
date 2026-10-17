@@ -1,0 +1,4 @@
+storeFile=../open-timeline.jks
+storePassword=change-me
+keyAlias=open-timeline
+keyPassword=change-me

@@ -79,24 +79,39 @@ There is no compression or encryption, by design. Any text editor opens a post, 
 - [Privacy policy](PRIVACY.md)
 - [Terms of service](TERMS.md)
 
-## Build it yourself
+## Run your own copy
 
-You need Flutter (stable) and the Android SDK. `tool/env.sh` shows how the development environment is set up.
+A clone or fork can run on its own Google Cloud project and its own releases, with nothing of the original author's in the build. You need Flutter (stable) and the Android SDK; `tool/env.sh` shows how the development environment is set up.
+
+**1. Google Cloud.** Sign-in needs your own project:
+
+1. Enable the **Google Drive API**.
+2. In **Google Auth Platform**, set the audience to **External**, add the scope `https://www.googleapis.com/auth/drive`, and add the Gmail addresses of the people who will use the app as test users (or publish the app).
+3. Create an **Android** OAuth client with your application ID (see below) and the SHA-1 of the key that signs your APK. For the default debug key: `keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`.
+4. Create a **Web application** OAuth client and keep its client ID.
+
+**2. Your settings.** Copy [`env.example.json`](env.example.json) to `env.json` in the project root. It is ignored by git, so it stays on your machine.
+
+| Key | What it is |
+| --- | --- |
+| `GOOGLE_WEB_CLIENT_ID` | The Web application client ID from step 1. Without it, sign-in is disabled. |
+| `UPDATE_REPO` | `owner/name` of the GitHub repository whose latest release the app checks for updates. Leave it out to remove the update check and its switch. |
+| `APPLICATION_ID` | The Android package name. Leave it out to keep `com.opentimeline.open_timeline`; set your own if you want to install next to the original app. The Android OAuth client in step 1 must use the same value. |
+
+**3. Build.** Pass the file to Flutter:
 
 ```bash
 source tool/env.sh
 flutter test
-flutter build apk --release      # signed with the debug key, fine for sideloading
+flutter run --dart-define-from-file=env.json
+flutter build apk --release --dart-define-from-file=env.json
 ```
 
-Google sign-in needs your own Google Cloud project:
+A release build is signed with the debug key unless you set up your own. To use one, copy [`android/key.properties.example`](android/key.properties.example) to `android/key.properties` (ignored by git) and fill in your keystore. Back up that keystore: if it is lost, sign-in stops working and updates will not install over the existing app.
 
-1. Enable the **Google Drive API**.
-2. In **Google Auth Platform**, set the audience to **External**, add the scope `https://www.googleapis.com/auth/drive`, and add the Gmail addresses of the people who will use the app as test users (or publish the app).
-3. Create an **Android** OAuth client with package name `com.opentimeline.open_timeline` and the SHA-1 of the key that signs your APK (`keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android`).
-4. Create a **Web application** OAuth client and put its client ID in [`lib/config.dart`](lib/config.dart).
+**4. Releases.** The update check reads the latest release of `UPDATE_REPO` and offers the first `.apk` attached to it. Name each release tag after the version in `pubspec.yaml` (for example `v1.2.0`), and give every release a higher build number (`1.2.0+10`) than the one before, because Android refuses to install a lower build over a higher one.
 
-Back up the keystore that signs your APK. If it is lost, sign-in stops working and updates will not install over the existing app.
+**5. Text that names the author.** Edit these by hand, since they are documents and not settings: [`PRIVACY.md`](PRIVACY.md) and [`TERMS.md`](TERMS.md) (name, repository and contact links), the release link near the top of this README, and `title` in [`_config.yml`](_config.yml) if you publish the pages.
 
 ```
 lib/models/   post model and its Markdown file format

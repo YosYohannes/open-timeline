@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/material.dart';
 
+import 'config.dart';
 import 'store/journal_store.dart';
 import 'sync/google_auth.dart';
 import 'sync/keep_alive.dart';
@@ -22,7 +23,9 @@ Future<void> main() async {
       store: store,
       auth: auth,
       sync: SyncService(store, auth, keepAlive: PlatformKeepAlive()),
-      updater: UpdateChecker(),
+      updater: kLatestReleaseApi.isEmpty
+          ? null
+          : UpdateChecker(endpoint: kLatestReleaseApi),
     ),
   );
   unawaited(auth.init());

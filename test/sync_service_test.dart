@@ -150,7 +150,7 @@ void main() {
       webClientId: '',
     );
     final r = await service.sync();
-    expect(r.errors.single, contains('kGoogleWebClientId'));
+    expect(r.errors.single, contains('GOOGLE_WEB_CLIENT_ID'));
     expect(service.lastAt, isNull);
   });
 

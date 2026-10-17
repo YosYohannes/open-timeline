@@ -4,9 +4,6 @@ import 'dart:convert';
 import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
-const kLatestReleaseApi =
-    'https://api.github.com/repos/YosYohannes/open-timeline/releases/latest';
-
 class UpdateInfo {
   const UpdateInfo({required this.version, required this.url});
 
@@ -69,7 +66,7 @@ class UpdateChecker {
   UpdateChecker({
     AppPlatform? platform,
     http.Client? client,
-    this.endpoint = kLatestReleaseApi,
+    required this.endpoint,
   }) : platform = platform ?? PlatformApp(),
        _client = client ?? http.Client();
 

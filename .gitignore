@@ -50,3 +50,6 @@ app.*.map.json
 # Signing material
 *.keystore
 *.jks
+
+# Your own copy: build settings and secrets
+/env.json

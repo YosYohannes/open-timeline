@@ -120,7 +120,7 @@ void main() {
     await openPost(tester, existing: _post());
 
     expect(find.text('Post'), findsOneWidget);
-    expect(find.text('partner@example.com'), findsOneWidget);
+    expect(find.text('partner@example.com'), findsNothing);
     expect(find.text('Fri 16 Oct 2026'), findsOneWidget);
     expect(find.text('14:32'), findsOneWidget);
     expect(find.text('Original'), findsOneWidget);
@@ -194,10 +194,11 @@ void main() {
 
   testWidgets('tapping the inline map sets the location', (tester) async {
     await openPost(tester, existing: _post());
+    expect(find.text('Add location'), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('location-row')));
+    await tester.pumpAndSettle();
     expect(find.text('Tap the map to set the location'), findsOneWidget);
 
-    await tester.ensureVisible(find.byType(FlutterMap));
-    await tester.pumpAndSettle();
     await tester.tap(find.byType(FlutterMap));
     await tester.pump(
       const Duration(milliseconds: 400),
@@ -205,6 +206,9 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Tap the map to set the location'), findsNothing);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.text('Add location'), findsNothing);
     expect(saveEnabled(tester), isTrue);
 
     await tapSave(tester);
@@ -215,13 +219,18 @@ void main() {
 
   testWidgets('Clear removes a location again', (tester) async {
     await openPost(tester, existing: _post(lat: 52.37, lon: 4.89));
-    expect(find.text('Tap the map to set the location'), findsNothing);
+    expect(find.text('Add location'), findsNothing);
     expect(saveEnabled(tester), isFalse);
 
-    await tester.ensureVisible(find.text('Clear'));
+    await tester.tap(find.byKey(const ValueKey('location-row')));
+    await tester.pumpAndSettle();
+    expect(find.text('Tap the map to set the location'), findsNothing);
     await tester.tap(find.text('Clear'));
     await tester.pumpAndSettle();
     expect(find.text('Tap the map to set the location'), findsOneWidget);
+    await tester.tapAt(const Offset(10, 10));
+    await tester.pumpAndSettle();
+    expect(find.text('Add location'), findsOneWidget);
     expect(saveEnabled(tester), isTrue);
   });
 
@@ -283,7 +292,7 @@ void main() {
       await openPost(tester);
       expect(find.text('New post'), findsOneWidget);
       expect(find.byType(PopupMenuButton<String>), findsNothing);
-      expect(find.text('me@example.com'), findsOneWidget);
+      expect(find.text('me@example.com'), findsNothing);
       expect(saveEnabled(tester), isFalse);
 
       await typeText(tester, 'Hello');
@@ -296,4 +305,30 @@ void main() {
       expect(store.entries.single.author, 'me@example.com');
     },
   );
+
+  testWidgets(
+    'the editor has no section headers, and + offers Photo, Video, Gallery',
+    (tester) async {
+      await openPost(tester);
+      for (final header in ['Location', 'Tags', 'Photos & videos']) {
+        expect(find.text(header), findsNothing);
+      }
+      await tester.tap(find.byKey(const ValueKey('add-media')));
+      await tester.pumpAndSettle();
+      expect(find.text('Photo'), findsOneWidget);
+      expect(find.text('Video'), findsOneWidget);
+      expect(find.text('Gallery'), findsOneWidget);
+    },
+  );
+
+  testWidgets('tags are added inline and suggestions only show while typing', (
+    tester,
+  ) async {
+    await openPost(tester, existing: _post());
+    expect(find.text('#walk'), findsOneWidget);
+    await tester.enterText(find.widgetWithText(TextField, '+ tag'), 'beach,');
+    await tester.pump();
+    expect(find.text('#beach'), findsOneWidget);
+    expect(saveEnabled(tester), isTrue);
+  });
 }

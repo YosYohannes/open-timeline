@@ -12,6 +12,8 @@ import io.flutter.plugin.common.MethodChannel
 
 @UnstableApi
 class MainActivity : FlutterActivity() {
+    private val scan = DocumentScan(this)
+
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "open_timeline/sync")
@@ -40,6 +42,13 @@ class MainActivity : FlutterActivity() {
                     } catch (e: Exception) {
                         result.error("open", e.message, null)
                     }
+                    else -> result.notImplemented()
+                }
+            }
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "open_timeline/scan")
+            .setMethodCallHandler { call, result ->
+                when (call.method) {
+                    "scan" -> scan.start(result)
                     else -> result.notImplemented()
                 }
             }
@@ -73,6 +82,13 @@ class MainActivity : FlutterActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
+        }
+    }
+
+    @Deprecated("Deprecated in Java")
+    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
+        if (!scan.handle(requestCode, resultCode, data)) {
+            super.onActivityResult(requestCode, resultCode, data)
         }
     }
 }

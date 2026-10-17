@@ -14,19 +14,24 @@ class UpdateInfo {
   final String url;
 }
 
-List<int>? _parts(String version) {
-  final m = RegExp(r'^v?(\d+)\.(\d+)\.(\d+)').firstMatch(version.trim());
-  return m == null ? null : [for (var i = 1; i <= 3; i++) int.parse(m[i]!)];
+({List<int> numbers, bool pre})? _parse(String version) {
+  final m = RegExp(r'^v?(\d+)\.(\d+)\.(\d+)(-[0-9A-Za-z.]+)?')
+      .firstMatch(version.trim());
+  if (m == null) return null;
+  return (
+    numbers: [for (var i = 1; i <= 3; i++) int.parse(m[i]!)],
+    pre: m[4] != null,
+  );
 }
 
 bool isNewerVersion(String latest, String installed) {
-  final a = _parts(latest);
-  final b = _parts(installed);
+  final a = _parse(latest);
+  final b = _parse(installed);
   if (a == null || b == null) return false;
   for (var i = 0; i < 3; i++) {
-    if (a[i] != b[i]) return a[i] > b[i];
+    if (a.numbers[i] != b.numbers[i]) return a.numbers[i] > b.numbers[i];
   }
-  return false;
+  return b.pre && !a.pre;
 }
 
 abstract class AppPlatform {

@@ -17,8 +17,18 @@ String entryToMarkdown(Entry e) {
   b.write('id: ${_q(e.id)}\n');
   b.write('author: ${_q(e.author)}\n');
   b.write('time: ${_q(_formatWithOffset(e.time, e.utcOffsetMinutes))}\n');
+  if (e.kind != kindPost) {
+    b.write('kind: ${_q(e.kind)}\n');
+  }
   if (e.title.isNotEmpty) {
     b.write('title: ${_q(e.title)}\n');
+  }
+  if (e.series.isNotEmpty) {
+    b.write('series: ${_q(e.series)}\n');
+  }
+  final country = e.country;
+  if (country != null && country.isNotEmpty) {
+    b.write('country: ${_q(country)}\n');
   }
   final color = e.color;
   if (color != null) {
@@ -167,6 +177,9 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
   final place = _str(yaml['place']);
   final title = _str(yaml['title'])?.trim() ?? '';
   final color = _parseColor(_str(yaml['color']));
+  final kind = _str(yaml['kind'])?.toLowerCase() ?? kindPost;
+  final series = _str(yaml['series']) ?? '';
+  final country = _str(yaml['country'])?.toUpperCase();
 
   var bodyLines = lines.sublist(headerEnd + 1);
   final marker = bodyLines.indexWhere((l) => l.trim() == mediaBlockMarker);
@@ -191,6 +204,9 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
     updated: updated,
     deleted: _bool(yaml['deleted']),
     conflict: _bool(yaml['conflict']),
+    kind: kind,
+    series: series,
+    country: country,
   );
 }
 

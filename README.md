@@ -14,6 +14,7 @@
 ## What it does
 
 - **Posts** with a date and time, an optional location, a title, text, tags, and any number of photos and videos.
+- **Stamps.** Scan a stamp from a booklet or passport. It is flattened, cropped and saved as a one-image entry with a name, series, date and place, and shows up on the timeline as a compact strip.
 - **Timeline, Calendar and Map** views, with "On this day" memories, filters by date, tag and person, and search.
 - **One diary, as many people as you like.** Each person uses their own Google account and their own phone, and everyone points the app at the same shared Drive folder. It works just as well with only you. Each person picks their own colour.
 - **Sync on a button press.** Nothing runs in the background. If you both edit the same post, nothing is lost: different changes are all kept, and clashing text keeps both versions with a warning.

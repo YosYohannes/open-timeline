@@ -10,14 +10,16 @@ import 'package:latlong2/latlong.dart';
 import 'package:open_filex/open_filex.dart';
 
 import '../../models/entry.dart';
+import '../../models/countries.dart';
 import '../../models/entry_format.dart';
 import '../../models/tag.dart';
 import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../stamp/country_picker.dart';
+import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
-import '../widgets/author.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
 import '../widgets/snack.dart';
@@ -26,10 +28,16 @@ import 'photo_viewer.dart';
 import 'video_prep.dart';
 
 class PostPage extends StatefulWidget {
-  const PostPage({super.key, required this.entry, this.isNew = false});
+  const PostPage({
+    super.key,
+    required this.entry,
+    this.isNew = false,
+    this.scanner,
+  });
 
   final Entry entry;
   final bool isNew;
+  final StampScanner? scanner;
 
   @override
   State<PostPage> createState() => _PostPageState();
@@ -50,11 +58,14 @@ class _PostPageState extends State<PostPage> {
   late final TextEditingController _title;
   late final TextEditingController _text;
   late final TextEditingController _place;
+  late final TextEditingController _series;
   final _tagInput = TextEditingController();
   final _tagFocus = FocusNode();
   final _tagFieldKey = GlobalKey();
   late List<String> _tags;
   late List<String> _media;
+  final _rev = ValueNotifier<int>(0);
+  String? _countryCode;
 
   final List<String> _imported = [];
 
@@ -76,9 +87,13 @@ class _PostPageState extends State<PostPage> {
     _title = TextEditingController(text: e.title)..addListener(_changed);
     _text = TextEditingController(text: e.text)..addListener(_changed);
     _place = TextEditingController(text: e.place ?? '')..addListener(_changed);
+    _series = TextEditingController(text: e.series)..addListener(_changed);
+    _countryCode = e.country;
     _tagInput.addListener(_changed);
+    _tagFocus.addListener(_changed);
     _tags = [...e.tags];
     _media = [...e.media];
+    if (widget.isNew && _isStamp) _imported.addAll(e.media);
     final lastLocated = _store.entries.where((x) => x.hasLocation).firstOrNull;
     if (lastLocated != null) {
       _mapFallback = LatLng(lastLocated.lat!, lastLocated.lon!);
@@ -86,9 +101,17 @@ class _PostPageState extends State<PostPage> {
   }
 
   @override
+  void setState(VoidCallback fn) {
+    super.setState(fn);
+    _rev.value++;
+  }
+
+  @override
   void dispose() {
+    _rev.dispose();
     _text.dispose();
     _place.dispose();
+    _series.dispose();
     _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
@@ -101,12 +124,16 @@ class _PostPageState extends State<PostPage> {
 
   bool get _hasLocation => _lat != null && _lon != null;
 
+  bool get _isStamp => _original.isStamp;
+
   bool get _dirty {
     final o = _original;
     return _timeChanged ||
         _text.text != o.text ||
         _title.text.trim() != o.title.trim() ||
         _place.text.trim() != (o.place ?? '').trim() ||
+        _series.text.trim() != o.series ||
+        _countryCode != o.country ||
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
@@ -127,6 +154,8 @@ class _PostPageState extends State<PostPage> {
       lat: _lat,
       lon: _lon,
       place: place.isEmpty ? null : place,
+      series: _series.text.trim(),
+      country: _countryCode,
       color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
@@ -179,7 +208,7 @@ class _PostPageState extends State<PostPage> {
       if (raced) {
         showSnack(context, 'Merged with changes synced while you were editing');
       }
-      navigator.pop();
+      navigator.pop(true);
     } catch (err) {
       if (mounted) {
         setState(() => _saving = false);
@@ -211,7 +240,9 @@ class _PostPageState extends State<PostPage> {
       ),
     );
     if (discard == true) {
-      _deleteFiles(_imported.where((n) => !_original.media.contains(n)));
+      _deleteFiles(
+        _imported.where((n) => widget.isNew || !_original.media.contains(n)),
+      );
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -230,9 +261,11 @@ class _PostPageState extends State<PostPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete this post?'),
-        content: const Text(
-          'The post and its photos and videos will be removed from this phone.',
+        title: Text(_isStamp ? 'Delete this stamp?' : 'Delete this post?'),
+        content: Text(
+          _isStamp
+              ? 'The stamp and its image will be removed from this phone.'
+              : 'The post and its photos and videos will be removed from this phone.',
         ),
         actions: [
           TextButton(
@@ -297,11 +330,89 @@ class _PostPageState extends State<PostPage> {
     });
   }
 
+  void _applyCountry(({String? label, String? iso})? found) {
+    if (!mounted) return;
+    final iso = found?.iso;
+    if (isKnownCountry(iso)) {
+      setState(() => _countryCode = iso);
+    } else {
+      _snack("Couldn't work out the country. Choose it from the list.");
+    }
+  }
+
+  Future<void> _pickCountry() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    final picked = await showCountryPicker(
+      context,
+      selected: _countryCode,
+      used: _store.usedCountries,
+    );
+    if (picked == null || !mounted) return;
+    setState(() => _countryCode = picked.code);
+  }
+
+  Widget _countryBox() {
+    final code = _countryCode;
+    return InkWell(
+      key: const ValueKey('country-box'),
+      borderRadius: kBorderRadius,
+      onTap: _pickCountry,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          labelText: 'Country',
+          border: OutlineInputBorder(),
+          isDense: true,
+          suffixIcon: Icon(Icons.arrow_drop_down),
+        ),
+        child: Text(
+          code == null ? 'Not set' : countryLabel(code),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _rescan() async {
+    if (_mediaBusy) return;
+    setState(() => _mediaBusy = true);
+    try {
+      final file = await scanWithMessage(
+        context,
+        widget.scanner ?? PlatformStampScanner(),
+      );
+      if (file == null) return;
+      if (!mounted) return;
+      final crop = await cropFromPage(Navigator.of(context), file);
+      try {
+        await file.delete();
+      } catch (_) {}
+      if (crop == null) return;
+      final cropped = crop;
+      try {
+        final name = await _store.importMedia(_original, cropped);
+        final old = _media.toList();
+        _imported.add(name);
+        if (mounted) setState(() => _media = [name]);
+        _deleteFiles(old.where(_imported.contains));
+      } finally {
+        try {
+          await cropped.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      _snack("Couldn't scan: ${_short(e)}");
+    } finally {
+      if (mounted) setState(() => _mediaBusy = false);
+    }
+  }
+
   void _clearLocation() {
     setState(() {
       _lat = null;
       _lon = null;
       _place.clear();
+      _countryCode = null;
     });
   }
 
@@ -330,8 +441,11 @@ class _PostPageState extends State<PostPage> {
       ).timeout(const Duration(seconds: 25));
       if (!mounted) return;
       _setLocation(pos.latitude, pos.longitude);
-      final label = await _reverseGeocode(pos.latitude, pos.longitude);
-      if (mounted && label != null) _place.text = label;
+      final found = await _lookup(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      final label = found?.label;
+      if (label != null) _place.text = label;
+      _applyCountry(found);
     } catch (e) {
       _snack("Couldn't get your location: ${_short(e)}");
     } finally {
@@ -355,8 +469,10 @@ class _PostPageState extends State<PostPage> {
         return;
       }
       if (!mounted) return;
-      _setLocation(results.first.latitude, results.first.longitude);
+      final spot = results.first;
+      _setLocation(spot.latitude, spot.longitude);
       _place.text = query.trim();
+      _applyCountry(await _lookup(spot.latitude, spot.longitude));
     } catch (e) {
       _snack("Couldn't find that place (${_short(e)})");
     } finally {
@@ -367,51 +483,54 @@ class _PostPageState extends State<PostPage> {
   Future<void> _onMapTap(LatLng p) async {
     FocusManager.instance.primaryFocus?.unfocus();
     _setLocation(p.latitude, p.longitude);
-    if (_place.text.trim().isNotEmpty) return;
-    final label = await _reverseGeocode(p.latitude, p.longitude);
-    if (mounted &&
-        label != null &&
-        _place.text.trim().isEmpty &&
-        _lat == p.latitude &&
-        _lon == p.longitude) {
-      _place.text = label;
-    }
+    final found = await _lookup(p.latitude, p.longitude);
+    if (!mounted || _lat != p.latitude || _lon != p.longitude) return;
+    final label = found?.label;
+    if (label != null && _place.text.trim().isEmpty) _place.text = label;
+    _applyCountry(found);
   }
 
   /// Null when no geocoder is available.
-  Future<String?> _reverseGeocode(double lat, double lon) async {
+  Future<({String? label, String? iso})?> _lookup(
+    double lat,
+    double lon,
+  ) async {
     try {
       final marks = await _geocoding
           .placemarkFromCoordinates(lat, lon)
           .timeout(const Duration(seconds: 8));
       if (marks.isEmpty) return null;
       final p = marks.first;
-      final parts = <String>[];
-      for (final s in [p.street, p.locality]) {
-        final t = s?.trim() ?? '';
-        if (t.isNotEmpty &&
-            !parts.any((x) => x.toLowerCase().contains(t.toLowerCase()))) {
-          parts.add(t);
-        }
-      }
-      if (parts.isEmpty) {
-        for (final s in [
-          p.name,
-          p.subLocality,
-          p.administrativeArea,
-          p.country,
-        ]) {
-          final t = s?.trim() ?? '';
-          if (t.isNotEmpty) {
-            parts.add(t);
-            break;
-          }
-        }
-      }
-      return parts.isEmpty ? null : parts.join(', ');
+      return (label: _labelOf(p), iso: p.isoCountryCode?.toUpperCase());
     } catch (_) {
       return null;
     }
+  }
+
+  static String? _labelOf(Placemark p) {
+    final parts = <String>[];
+    for (final s in [p.street, p.locality]) {
+      final t = s?.trim() ?? '';
+      if (t.isNotEmpty &&
+          !parts.any((x) => x.toLowerCase().contains(t.toLowerCase()))) {
+        parts.add(t);
+      }
+    }
+    if (parts.isEmpty) {
+      for (final s in [
+        p.name,
+        p.subLocality,
+        p.administrativeArea,
+        p.country,
+      ]) {
+        final t = s?.trim() ?? '';
+        if (t.isNotEmpty) {
+          parts.add(t);
+          break;
+        }
+      }
+    }
+    return parts.isEmpty ? null : parts.join(', ');
   }
 
   void _addTag(String raw) {
@@ -560,8 +679,6 @@ class _PostPageState extends State<PostPage> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final scheme = theme.colorScheme;
-    final placeText = _place.text.trim();
-
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -569,7 +686,11 @@ class _PostPageState extends State<PostPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.isNew ? 'New post' : 'Post'),
+          title: Text(
+            _isStamp
+                ? (widget.isNew ? 'New stamp' : 'Stamp')
+                : (widget.isNew ? 'New post' : 'Post'),
+          ),
           actions: [
             FilledButton(
               onPressed: _saving || !_dirty ? null : _save,
@@ -605,22 +726,10 @@ class _PostPageState extends State<PostPage> {
                 _conflictBanner(theme),
                 const SizedBox(height: 16),
               ],
-              Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Row(
-                  children: [
-                    AuthorDot(author: _original.author, size: 12),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        _original.author,
-                        style: theme.textTheme.bodyMedium,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              if (_isStamp) ...[
+                _stampPreview(theme),
+                const SizedBox(height: 16),
+              ],
               ActionRow(
                 items: [
                   ActionItem(
@@ -638,215 +747,413 @@ class _PostPageState extends State<PostPage> {
                 ],
               ),
               const SizedBox(height: 16),
-
-              TextField(
-                controller: _title,
-                textCapitalization: TextCapitalization.sentences,
-                textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  hintText: 'Title (optional)',
-                  border: OutlineInputBorder(),
-                ),
-              ),
-              const SizedBox(height: 12),
-
-              TextField(
-                controller: _text,
-                minLines: 6,
-                maxLines: null,
-                keyboardType: TextInputType.multiline,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'What happened?',
-                  border: OutlineInputBorder(),
-                  alignLabelWithHint: true,
-                ),
-              ),
-              const SizedBox(height: 20),
-
-              _sectionTitle(theme, 'Location'),
-              if (_hasLocation || placeText.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Row(
-                    children: [
-                      Icon(Icons.place, size: 20, color: scheme.primary),
-                      const SizedBox(width: 6),
-                      Expanded(
-                        child: Text(
-                          [
-                            if (placeText.isNotEmpty) placeText,
-                            if (_hasLocation) '(${formatCoords(_lat!, _lon!)})',
-                          ].join(' '),
-                          style: theme.textTheme.bodyMedium,
-                        ),
-                      ),
-                    ],
+              if (_isStamp) ...[
+                TextField(
+                  controller: _series,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Series',
+                    hintText: 'e.g. JR West eki stamps',
+                    prefixIcon: Icon(Icons.collections_bookmark_outlined),
+                    border: OutlineInputBorder(),
+                    isDense: true,
                   ),
                 ),
-              TextField(
-                controller: _place,
-                textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  labelText: 'Place label',
-                  hintText: 'e.g. Scheveningen beach',
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-              ),
-              const SizedBox(height: 8),
-              ActionRow(
-                items: [
-                  ActionItem(
-                    icon: Icons.my_location,
-                    label: 'Current',
-                    onPressed: _locBusy ? null : _useCurrentLocation,
-                  ),
-                  ActionItem(
-                    icon: Icons.search,
-                    label: 'Search',
-                    onPressed: _locBusy ? null : _searchPlace,
-                  ),
-                  if (_hasLocation || placeText.isNotEmpty)
-                    ActionItem(
-                      icon: Icons.location_off_outlined,
-                      label: 'Clear',
-                      onPressed: _clearLocation,
-                    ),
-                ],
-              ),
-              if (_locBusy)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(),
-                ),
-              const SizedBox(height: 12),
-              LocationMap(
-                point: _hasLocation ? LatLng(_lat!, _lon!) : null,
-                author: _original.author,
-                fallbackCenter: _mapFallback,
-                onTap: _onMapTap,
-              ),
-              const SizedBox(height: 20),
-
-              _sectionTitle(theme, 'Tags'),
-              if (_tags.isNotEmpty)
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 8),
-                  child: Wrap(
-                    spacing: 8,
-                    runSpacing: 4,
-                    children: [
-                      for (final t in _tags)
-                        InputChip(
-                          label: Text('#$t'),
-                          onDeleted: () =>
-                              setState(() => _tags = [..._tags]..remove(t)),
-                        ),
-                    ],
+                _seriesSuggestions(),
+              ] else ...[
+                TextField(
+                  controller: _title,
+                  textCapitalization: TextCapitalization.sentences,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    hintText: 'Title (optional)',
+                    border: OutlineInputBorder(),
                   ),
                 ),
-              TextField(
-                key: _tagFieldKey,
-                controller: _tagInput,
-                focusNode: _tagFocus,
-                textInputAction: TextInputAction.done,
-                autocorrect: false,
-                decoration: const InputDecoration(
-                  labelText: 'Add a tag',
-                  hintText: 'Type, then press enter or comma',
-                  prefixIcon: Icon(Icons.sell_outlined),
-                  border: OutlineInputBorder(),
-                  isDense: true,
-                ),
-                onChanged: _onTagInputChanged,
-                onSubmitted: (_) {
-                  _commitTagInput();
-                  _tagFocus.requestFocus();
-                  _revealTagField();
-                },
-              ),
-              _tagSuggestions(),
-              const SizedBox(height: 20),
-
-              _sectionTitle(theme, 'Photos & videos'),
-              ActionRow(
-                items: [
-                  ActionItem(
-                    icon: Icons.photo_camera_outlined,
-                    label: 'Photo',
-                    onPressed: _mediaBusy ? null : _addPhoto,
-                  ),
-                  ActionItem(
-                    icon: Icons.videocam_outlined,
-                    label: 'Video',
-                    onPressed: _mediaBusy ? null : _addVideo,
-                  ),
-                  ActionItem(
-                    icon: Icons.photo_library_outlined,
-                    label: 'Gallery',
-                    onPressed: _mediaBusy ? null : _addFromGallery,
-                  ),
-                ],
-              ),
-              if (_mediaBusy)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(),
-                ),
-              if (_media.isNotEmpty) ...[
                 const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final m in _media)
-                      SizedBox(
-                        width: 104,
-                        height: 104,
-                        child: Stack(
-                          children: [
-                            MediaTile(
-                              file: _store.mediaFile(_original, m),
-                              name: m,
-                              size: 104,
-                              radius: kRadius,
-                              onTap: () => _openMedia(m),
-                            ),
-                            Positioned(
-                              top: 2,
-                              right: 2,
-                              child: Material(
-                                color: Colors.black54,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: kBorderRadius,
-                                ),
-                                child: InkWell(
-                                  customBorder: RoundedRectangleBorder(
-                                    borderRadius: kBorderRadius,
-                                  ),
-                                  onTap: () => setState(
-                                    () => _media = [..._media]..remove(m),
-                                  ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 16,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                  ],
+                TextField(
+                  controller: _text,
+                  minLines: 5,
+                  maxLines: null,
+                  keyboardType: TextInputType.multiline,
+                  textCapitalization: TextCapitalization.sentences,
+                  decoration: const InputDecoration(
+                    hintText: 'What happened?',
+                    border: OutlineInputBorder(),
+                    alignLabelWithHint: true,
+                  ),
                 ),
+                const SizedBox(height: 12),
+                _mediaStrip(),
               ],
+              const SizedBox(height: 12),
+              _locationRow(theme),
+              const SizedBox(height: 12),
+              _tagsBlock(),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _mediaStrip() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            for (final m in _media)
+              SizedBox(
+                width: 88,
+                height: 88,
+                child: Stack(
+                  children: [
+                    MediaTile(
+                      file: _store.mediaFile(_original, m),
+                      name: m,
+                      size: 88,
+                      radius: kRadius,
+                      onTap: () => _openMedia(m),
+                    ),
+                    Positioned(
+                      top: 2,
+                      right: 2,
+                      child: Material(
+                        color: Colors.black54,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: kBorderRadius,
+                        ),
+                        child: InkWell(
+                          customBorder: RoundedRectangleBorder(
+                            borderRadius: kBorderRadius,
+                          ),
+                          onTap: () =>
+                              setState(() => _media = [..._media]..remove(m)),
+                          child: const Padding(
+                            padding: EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.close,
+                              size: 16,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            SizedBox(
+              width: 88,
+              height: 88,
+              child: OutlinedButton(
+                key: const ValueKey('add-media'),
+                style: OutlinedButton.styleFrom(padding: EdgeInsets.zero),
+                onPressed: _mediaBusy ? null : _showAddMedia,
+                child: const Icon(Icons.add_photo_alternate_outlined),
+              ),
+            ),
+          ],
+        ),
+        if (_mediaBusy)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+      ],
+    );
+  }
+
+  void _showAddMedia() {
+    FocusManager.instance.primaryFocus?.unfocus();
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.photo_camera_outlined),
+              title: const Text('Photo'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addPhoto();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.videocam_outlined),
+              title: const Text('Video'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addVideo();
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.photo_library_outlined),
+              title: const Text('Gallery'),
+              onTap: () {
+                Navigator.pop(ctx);
+                _addFromGallery();
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _locationRow(ThemeData theme) {
+    final place = _place.text.trim();
+    final code = _countryCode;
+    final label = place.isNotEmpty
+        ? place
+        : (_hasLocation ? formatCoords(_lat!, _lon!) : '');
+    final empty = label.isEmpty && code == null;
+    return InkWell(
+      key: const ValueKey('location-row'),
+      borderRadius: kBorderRadius,
+      onTap: _openLocationSheet,
+      child: InputDecorator(
+        decoration: const InputDecoration(
+          prefixIcon: Icon(Icons.place_outlined),
+          suffixIcon: Icon(Icons.chevron_right),
+          border: OutlineInputBorder(),
+          isDense: true,
+        ),
+        child: empty
+            ? Text('Add location', style: TextStyle(color: theme.hintColor))
+            : Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      label.isEmpty ? countryName(code!) : label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  if (code != null && label.isNotEmpty) ...[
+                    const SizedBox(width: 8),
+                    Text('${countryFlag(code)} $code'),
+                  ],
+                ],
+              ),
+      ),
+    );
+  }
+
+  Future<void> _openLocationSheet() async {
+    FocusManager.instance.primaryFocus?.unfocus();
+    await showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (ctx) => ListenableBuilder(
+        listenable: Listenable.merge([_rev, _place]),
+        builder: (ctx, _) => _locationSheet(ctx),
+      ),
+    );
+  }
+
+  Widget _locationSheet(BuildContext ctx) {
+    final hasAny =
+        _hasLocation || _place.text.trim().isNotEmpty || _countryCode != null;
+    return SafeArea(
+      child: SingleChildScrollView(
+        padding: EdgeInsets.fromLTRB(
+          16,
+          0,
+          16,
+          16 + MediaQuery.of(ctx).viewInsets.bottom,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 5,
+                  child: TextField(
+                    controller: _place,
+                    textCapitalization: TextCapitalization.sentences,
+                    decoration: const InputDecoration(
+                      labelText: 'Place label',
+                      hintText: 'e.g. Scheveningen beach',
+                      border: OutlineInputBorder(),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(flex: 4, child: _countryBox()),
+              ],
+            ),
+            const SizedBox(height: 8),
+            ActionRow(
+              items: [
+                ActionItem(
+                  icon: Icons.my_location,
+                  label: 'Current',
+                  onPressed: _locBusy ? null : _useCurrentLocation,
+                ),
+                ActionItem(
+                  icon: Icons.search,
+                  label: 'Search',
+                  onPressed: _locBusy ? null : _searchPlace,
+                ),
+                if (hasAny)
+                  ActionItem(
+                    icon: Icons.location_off_outlined,
+                    label: 'Clear',
+                    onPressed: _clearLocation,
+                  ),
+              ],
+            ),
+            if (_locBusy)
+              const Padding(
+                padding: EdgeInsets.only(top: 8),
+                child: LinearProgressIndicator(),
+              ),
+            const SizedBox(height: 12),
+            LocationMap(
+              point: _hasLocation ? LatLng(_lat!, _lon!) : null,
+              author: _original.author,
+              fallbackCenter: _mapFallback,
+              onTap: _onMapTap,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _tagsBlock() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Wrap(
+          spacing: 8,
+          runSpacing: 4,
+          crossAxisAlignment: WrapCrossAlignment.center,
+          children: [
+            for (final t in _tags)
+              InputChip(
+                label: Text('#$t'),
+                onDeleted: () => setState(() => _tags = [..._tags]..remove(t)),
+              ),
+            SizedBox(
+              width: 150,
+              child: Row(
+                children: [
+                  const Icon(Icons.sell_outlined, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      key: _tagFieldKey,
+                      controller: _tagInput,
+                      focusNode: _tagFocus,
+                      textInputAction: TextInputAction.done,
+                      autocorrect: false,
+                      decoration: const InputDecoration(
+                        hintText: '+ tag',
+                        border: InputBorder.none,
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(vertical: 10),
+                      ),
+                      onChanged: _onTagInputChanged,
+                      onSubmitted: (_) {
+                        _commitTagInput();
+                        _tagFocus.requestFocus();
+                        _revealTagField();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        _tagSuggestions(),
+      ],
+    );
+  }
+
+  Widget _stampPreview(ThemeData theme) {
+    final name = _media.firstOrNull;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 240,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: kBorderRadius,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: name == null
+              ? null
+              : InkWell(
+                  onTap: () => _openMedia(name),
+                  child: Image.file(
+                    _store.mediaFile(_original, name),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        const Center(child: Icon(Icons.broken_image_outlined)),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 8),
+        ActionRow(
+          items: [
+            ActionItem(
+              icon: Icons.document_scanner_outlined,
+              label: 'Scan again',
+              onPressed: _mediaBusy ? null : _rescan,
+            ),
+          ],
+        ),
+        if (_mediaBusy)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+      ],
+    );
+  }
+
+  Widget _seriesSuggestions() {
+    final typed = _series.text.trim().toLowerCase();
+    final suggestions = _store.allSeries
+        .where((t) => t.toLowerCase() != typed)
+        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
+        .take(10)
+        .toList();
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final t in suggestions)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  label: Text(t),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _series.text = t,
+                ),
+              ),
+          ],
         ),
       ),
     );
@@ -878,17 +1185,6 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  Widget _sectionTitle(ThemeData theme, String title) => Padding(
-    padding: const EdgeInsets.only(bottom: 8),
-    child: Text(
-      title,
-      style: theme.textTheme.titleSmall?.copyWith(
-        color: theme.colorScheme.primary,
-        fontWeight: FontWeight.w600,
-      ),
-    ),
-  );
-
   Widget _tagSuggestions() {
     final typed = _tagInput.text
         .trim()
@@ -900,7 +1196,9 @@ class _PostPageState extends State<PostPage> {
         .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
         .take(10)
         .toList();
-    if (suggestions.isEmpty) return const SizedBox.shrink();
+    if (suggestions.isEmpty || !(_tagFocus.hasFocus || typed.isNotEmpty)) {
+      return const SizedBox.shrink();
+    }
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(

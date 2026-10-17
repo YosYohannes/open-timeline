@@ -2,7 +2,7 @@
 
 **Open Timeline** is a private diary app for one person or a small group. This policy explains what the app does with your information.
 
-Last updated: 17 October 2026
+Last updated: 18 October 2026
 
 ## The short version
 
@@ -26,7 +26,7 @@ Open Timeline is an open-source hobby project by Yos Yohannes ([github.com/YosYo
 ## Permissions the app asks for
 
 - **Location**, only when you tap **Current** in a post. The app reads your position once to fill in the post's location. It does not track you, and it does not use location in the background.
-- **Camera**, only when you tap **Photo** or **Video**.
+- **Camera**, only when you tap **Photo**, **Video** or the stamp scanner. The stamp scanner is Google's document scanner from Google Play services, and it works on your phone without sending the images anywhere.
 - **Photos and videos**, only when you choose files to attach.
 - **Internet**, to sync with Google Drive, load map images and check for updates.
 

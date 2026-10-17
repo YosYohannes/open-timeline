@@ -7,6 +7,7 @@ import '../../update/update_check.dart';
 import '../app/app_title.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
+import '../booklet/collection_page.dart';
 import '../settings/account_actions.dart';
 import '../settings/settings_page.dart';
 import '../stamp/stamp_scan.dart';
@@ -278,7 +279,9 @@ class _HomePageState extends State<HomePage> {
               )
             : const Text(kAppTitle),
         actions: [
-          if (!_searching)
+          if (_tab == 3)
+            const SizedBox.shrink()
+          else if (!_searching)
             IconButton(
               icon: const Icon(Icons.search),
               tooltip: 'Search',
@@ -293,16 +296,17 @@ class _HomePageState extends State<HomePage> {
                 _filter.query = '';
               },
             ),
-          IconButton(
-            icon: Badge(
-              smallSize: 8,
-              backgroundColor: theme.colorScheme.primary,
-              isLabelVisible: hasSheetFilters(_filter),
-              child: const Icon(Icons.filter_alt_outlined),
+          if (_tab != 3)
+            IconButton(
+              icon: Badge(
+                smallSize: 8,
+                backgroundColor: theme.colorScheme.primary,
+                isLabelVisible: hasSheetFilters(_filter),
+                child: const Icon(Icons.filter_alt_outlined),
+              ),
+              tooltip: 'Filters',
+              onPressed: () => showFilterSheet(context, _filter),
             ),
-            tooltip: 'Filters',
-            onPressed: () => showFilterSheet(context, _filter),
-          ),
           _syncButton(theme, store),
           IconButton(
             icon: const Icon(Icons.settings_outlined),
@@ -325,16 +329,23 @@ class _HomePageState extends State<HomePage> {
                   MapPage(filter: _filter, active: _tab == 2)
                 else
                   const SizedBox.shrink(),
+                const CollectionPage(),
               ],
             ),
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
-        tooltip: 'New',
-        onPressed: _showAddMenu,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _tab == 3
+          ? FloatingActionButton(
+              tooltip: 'Scan a stamp',
+              onPressed: () => newStamp(context),
+              child: const Icon(Icons.document_scanner_outlined),
+            )
+          : FloatingActionButton(
+              tooltip: 'New',
+              onPressed: _showAddMenu,
+              child: const Icon(Icons.add),
+            ),
       bottomNavigationBar: NavigationBar(
         selectedIndex: _tab,
         onDestinationSelected: (i) => setState(() {
@@ -356,6 +367,11 @@ class _HomePageState extends State<HomePage> {
             icon: Icon(Icons.map_outlined),
             selectedIcon: Icon(Icons.map),
             label: 'Map',
+          ),
+          NavigationDestination(
+            icon: Icon(Icons.collections_bookmark_outlined),
+            selectedIcon: Icon(Icons.collections_bookmark),
+            label: 'Collection',
           ),
         ],
       ),

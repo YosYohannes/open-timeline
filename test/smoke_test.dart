@@ -1,9 +1,11 @@
 import 'dart:io';
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:open_timeline/main.dart';
 import 'package:open_timeline/store/journal_store.dart';
 import 'package:open_timeline/ui/app/app_title.dart';
+import 'package:open_timeline/ui/home/filters.dart';
 import 'package:open_timeline/sync/google_auth.dart';
 import 'package:open_timeline/sync/sync_service.dart';
 
@@ -66,8 +68,14 @@ void main() {
 
       await tester.tap(find.byTooltip('Filters'));
       await tester.pumpAndSettle();
-      expect(find.text('Collection'), findsOneWidget);
-      await tester.tap(find.text('Collection'));
+      final segments = find.byType(SegmentedButton<ContentShow>);
+      expect(
+        find.descendant(of: segments, matching: find.text('Collection')),
+        findsOneWidget,
+      );
+      await tester.tap(
+        find.descendant(of: segments, matching: find.text('Collection')),
+      );
       await tester.pumpAndSettle();
       expect(find.text('Clear'), findsOneWidget);
     },

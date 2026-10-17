@@ -30,6 +30,12 @@ String entryToMarkdown(Entry e) {
   if (country != null && country.isNotEmpty) {
     b.write('country: ${_q(country)}\n');
   }
+  if (e.size != sizeMedium) {
+    b.write('size: ${_q(e.size)}\n');
+  }
+  if (e.blend) {
+    b.write('blend: true\n');
+  }
   final color = e.color;
   if (color != null) {
     final rgb = (color & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
@@ -180,6 +186,8 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
   final kind = _str(yaml['kind'])?.toLowerCase() ?? kindPost;
   final series = _str(yaml['series']) ?? '';
   final country = _str(yaml['country'])?.toUpperCase();
+  final sizeText = _str(yaml['size'])?.toLowerCase();
+  final size = stampSizes.contains(sizeText) ? sizeText! : sizeMedium;
 
   var bodyLines = lines.sublist(headerEnd + 1);
   final marker = bodyLines.indexWhere((l) => l.trim() == mediaBlockMarker);
@@ -207,6 +215,8 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
     kind: kind,
     series: series,
     country: country,
+    size: size,
+    blend: _bool(yaml['blend']),
   );
 }
 

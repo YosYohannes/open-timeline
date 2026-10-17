@@ -45,6 +45,8 @@ bool _changed(Entry side, Entry? base) {
       side.color != base.color ||
       side.series != base.series ||
       side.country != base.country ||
+      side.size != base.size ||
+      side.blend != base.blend ||
       side.text != base.text ||
       !_sameList(side.tags, base.tags) ||
       !_sameList(side.media, base.media) ||
@@ -140,6 +142,14 @@ Entry mergeEntry({
       ? local.country
       : remote.country;
 
+  final localSize = base == null || local.size != base.size;
+  final remoteSize = base == null || remote.size != base.size;
+  final size = (localSize && !remoteSize) ? local.size : remote.size;
+
+  final localBlend = base == null || local.blend != base.blend;
+  final remoteBlend = base == null || remote.blend != base.blend;
+  final blend = (localBlend && !remoteBlend) ? local.blend : remote.blend;
+
   // ---- text
   final localText = base == null || local.text != base.text;
   final remoteText = base == null || remote.text != base.text;
@@ -178,6 +188,8 @@ Entry mergeEntry({
     kind: remote.kind,
     series: series,
     country: country,
+    size: size,
+    blend: blend,
     text: text,
     tags: _mergeList(base?.tags ?? const [], local.tags, remote.tags),
     media: _mergeList(base?.media ?? const [], local.media, remote.media),

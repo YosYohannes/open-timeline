@@ -112,6 +112,17 @@ Future<void> _discard(File file) async {
   } catch (_) {}
 }
 
+Entry _sameEvent(Entry base, Entry from) => base.copyWith(
+  time: from.time,
+  utcOffsetMinutes: from.utcOffsetMinutes,
+  lat: from.lat,
+  lon: from.lon,
+  place: from.place,
+  country: from.country,
+  series: from.series,
+  tags: from.tags,
+);
+
 Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
   final store = StoreScope.read(context);
   final me = store.settings.me.trim();
@@ -127,13 +138,15 @@ Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
   if (page == null) return;
   try {
     var saved = 0;
+    Entry? previous;
     while (true) {
       final crop = await cropFromPage(navigator, page, saved: saved);
       if (crop == null) break;
-      final base = Entry.create(
+      var base = Entry.create(
         author: me,
         kind: kindStamp,
       ).copyWith(color: store.settings.myColor);
+      if (previous != null) base = _sameEvent(base, previous);
       final String name;
       try {
         name = await store.importMedia(base, crop);
@@ -154,7 +167,10 @@ Future<void> newStamp(BuildContext context, {StampScanner? scanner}) async {
           fullscreenDialog: true,
         ),
       );
-      if (filed == true) saved++;
+      if (filed == true) {
+        saved++;
+        previous = store.byId(base.id);
+      }
     }
   } finally {
     await _discard(page);

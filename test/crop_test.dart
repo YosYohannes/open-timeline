@@ -155,6 +155,29 @@ void main() {
       expect(size.height, lessThan(400));
     });
 
+    testWidgets('several drag events in one frame all move the corner', (
+      tester,
+    ) async {
+      final file = await makeImage(tester, 500, 500);
+      late double scale;
+      final bytes = await run(tester, file, () async {
+        final box = tester.getRect(find.byKey(const ValueKey('crop-area')));
+        final side = math.min(box.width, box.height) - 32;
+        scale = side / 500;
+        final left = box.center.dx - side / 2 + side * 0.1;
+        final top = box.center.dy - side / 2 + side * 0.1;
+        final finger = await tester.startGesture(Offset(left, top));
+        await finger.moveBy(const Offset(10, 10));
+        await finger.moveBy(const Offset(10, 10));
+        await finger.moveBy(const Offset(10, 10));
+        await finger.up();
+        await tester.pump();
+      });
+      final size = await sizeOf(tester, bytes!);
+      expect(size.width, closeTo(400 - 30 / scale, 2));
+      expect(size.height, closeTo(400 - 30 / scale, 2));
+    });
+
     testWidgets('Square makes the crop 1:1 and corners keep it square', (
       tester,
     ) async {

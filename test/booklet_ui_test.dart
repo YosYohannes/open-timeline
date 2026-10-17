@@ -172,7 +172,9 @@ void main() {
     expect(find.text('CONTENTS'), findsOneWidget);
   });
 
-  testWidgets('tapping a stamp on a page opens it', (tester) async {
+  testWidgets('a stamp on a page stands alone, without a caption', (
+    tester,
+  ) async {
     await open(tester);
     await tester.tap(find.byKey(const ValueKey('booklet-TW')));
     await tester.pumpAndSettle();
@@ -184,7 +186,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.byType(StampPrint), findsOneWidget);
-    expect(find.textContaining('Place 6'), findsOneWidget);
+    expect(find.textContaining('Place 6'), findsNothing);
   });
 
   testWidgets('one swipe turns one page, however long or fast', (tester) async {

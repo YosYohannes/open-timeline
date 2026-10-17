@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 
 import '../../models/booklet.dart';
@@ -8,6 +10,7 @@ import '../app/store_scope.dart';
 import 'book_cover.dart';
 import 'book_pager.dart';
 import 'collage_layout.dart';
+import 'stamp_cutout.dart';
 import 'stamp_image.dart';
 import 'stamp_print.dart';
 
@@ -35,6 +38,11 @@ class _PageSpec {
 
 class _BookletPageState extends State<BookletPage> {
   final _book = BookController();
+  String _signature = '';
+  Future<void>? _ready;
+  String _layoutKey = '';
+  List<_PageSpec> _specs = const [];
+  List<int> _starts = const [];
 
   @override
   void dispose() {
@@ -58,11 +66,49 @@ class _BookletPageState extends State<BookletPage> {
           ? const Center(child: Text('This booklet is empty'))
           : Padding(
               padding: const EdgeInsets.fromLTRB(12, 4, 12, 16),
-              child: LayoutBuilder(
-                builder: (context, box) =>
-                    _buildBook(context, booklet, box.biggest),
+              child: _withCutouts(
+                booklet,
+                (context) => LayoutBuilder(
+                  builder: (context, box) =>
+                      _buildBook(context, booklet, box.biggest),
+                ),
               ),
             ),
+    );
+  }
+
+  List<(File, String)> _cutoutFiles(Booklet booklet) {
+    final store = StoreScope.read(context);
+    return [
+      for (final e in booklet.stamps)
+        if (e.blend && e.media.any(isImage))
+          (store.mediaFile(e, e.media.firstWhere(isImage)), e.cutout),
+    ];
+  }
+
+  Widget _withCutouts(Booklet booklet, WidgetBuilder builder) {
+    final files = _cutoutFiles(booklet);
+    final signature = [
+      for (final e in booklet.stamps)
+        '${e.id}:${e.media.join(',')}:${e.blend}:${e.size}:${e.cutout}',
+    ].join('|');
+    if (signature != _signature) {
+      _signature = signature;
+      final pending = [
+        for (final f in files)
+          if (!hasCutout(f.$1, f.$2)) f,
+      ];
+      _ready = pending.isEmpty
+          ? null
+          : Future.wait([for (final f in pending) cutoutOf(f.$1, f.$2)]);
+    }
+    final ready = _ready;
+    if (ready == null) return builder(context);
+    return FutureBuilder<void>(
+      future: ready,
+      builder: (context, snap) => snap.connectionState == ConnectionState.done
+          ? builder(context)
+          : const Center(child: CircularProgressIndicator()),
     );
   }
 
@@ -78,18 +124,25 @@ class _BookletPageState extends State<BookletPage> {
       bookWidth - _pageInset * 2,
       bookHeight - _pageInset * 2 - _headerHeight - _footerHeight,
     );
-    final specs = <_PageSpec>[];
-    final starts = <int>[];
-    for (var s = 0; s < booklet.sections.length; s++) {
-      final items = [
-        for (final e in booklet.sections[s].stamps)
-          CollageItem(id: e.id, ratio: _ratioOf(store, e), size: e.size),
-      ];
-      starts.add(_contentsPage + 1 + specs.length);
-      for (final page in layoutCollage(items, area)) {
-        specs.add(_PageSpec(section: s, placed: page));
+    final key = '$_signature|${area.width}|${area.height}';
+    if (key != _layoutKey) {
+      _layoutKey = key;
+      final specs = <_PageSpec>[];
+      final starts = <int>[];
+      for (var s = 0; s < booklet.sections.length; s++) {
+        final items = [
+          for (final e in booklet.sections[s].stamps) _itemOf(store, e),
+        ];
+        starts.add(_contentsPage + 1 + specs.length);
+        for (final page in layoutCollage(items, area)) {
+          specs.add(_PageSpec(section: s, placed: page));
+        }
       }
+      _specs = specs;
+      _starts = starts;
     }
+    final specs = _specs;
+    final starts = _starts;
     final byId = {for (final e in booklet.stamps) e.id: e};
     String seriesName(int s) => booklet.sections[s].series.isEmpty
         ? 'Other'
@@ -137,10 +190,19 @@ class _BookletPageState extends State<BookletPage> {
     );
   }
 
-  double _ratioOf(JournalStore store, Entry e) {
+  CollageItem _itemOf(JournalStore store, Entry e) {
     final image = e.media.where(isImage).firstOrNull;
-    if (image == null) return 1.0;
-    return aspectRatioOf(store.mediaFile(e, image));
+    if (image == null) {
+      return CollageItem(id: e.id, ratio: 1.0, size: e.size);
+    }
+    final file = store.mediaFile(e, image);
+    final cut = e.blend ? cachedCutout(file, e.cutout) : null;
+    return CollageItem(
+      id: e.id,
+      ratio: cut?.ratio ?? aspectRatioOf(file),
+      size: e.size,
+      mask: cut?.mask,
+    );
   }
 }
 

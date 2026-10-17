@@ -202,6 +202,39 @@ void main() {
     );
   });
 
+  testWidgets('the next stamp from a page starts with the same event', (
+    tester,
+  ) async {
+    await open(tester, (d) => FakeScanner(d));
+    await useCrop(tester);
+    await tester.enterText(
+      find.widgetWithText(TextField, 'Series'),
+      'JR West eki',
+    );
+    await tester.pump();
+    await tester.runAsync(
+      () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
+    );
+    await settleReal(tester, until: () => shows('Crop another stamp'));
+    final first = store.entries.single;
+
+    await useCrop(tester);
+    expect(
+      tester
+          .widget<TextField>(find.widgetWithText(TextField, 'Series'))
+          .controller!
+          .text,
+      'JR West eki',
+    );
+    await tester.runAsync(
+      () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
+    );
+    await settleReal(tester, until: () => store.entries.length == 2);
+    final second = store.entries.firstWhere((e) => e.id != first.id);
+    expect(second.series, 'JR West eki');
+    expect(second.time, first.time);
+  });
+
   testWidgets('cancelling the crop files nothing and drops the scan', (
     tester,
   ) async {
@@ -323,12 +356,13 @@ void main() {
     await open(tester, (d) => FakeScanner(d, image: white));
     await useCrop(tester);
     expect(blendOn(tester), isTrue);
-    await tester.tap(
-      find.descendant(
-        of: find.byKey(const ValueKey('size-choice')),
-        matching: find.text('Large'),
-      ),
+    final large = find.descendant(
+      of: find.byKey(const ValueKey('size-choice')),
+      matching: find.text('Large'),
     );
+    await tester.ensureVisible(large);
+    await tester.pump();
+    await tester.tap(large);
     await tester.pump();
     await tester.runAsync(
       () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
@@ -337,5 +371,28 @@ void main() {
     final saved = store.entries.single;
     expect(saved.blend, isTrue);
     expect(saved.size, sizeLarge);
+    expect(saved.cutout, isEmpty);
+  });
+
+  testWidgets('the cut-out method and a picked paper colour are saved', (
+    tester,
+  ) async {
+    final white = await solidPng(tester, const Color(0xFFFFFFFF));
+    await open(tester, (d) => FakeScanner(d, image: white));
+    await useCrop(tester);
+    final method = find.descendant(
+      of: find.byKey(const ValueKey('cutout-method')),
+      matching: find.text('AI removal'),
+    );
+    await tester.ensureVisible(method);
+    await tester.pump();
+    await tester.tap(method);
+    await tester.pump();
+    expect(find.byKey(const ValueKey('paper-pick')), findsNothing);
+    await tester.runAsync(
+      () => tester.tap(find.widgetWithText(FilledButton, 'Save')),
+    );
+    await settleReal(tester, until: () => shows('Crop another stamp'));
+    expect(store.entries.single.cutout, 'subject');
   });
 }

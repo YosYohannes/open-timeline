@@ -5,6 +5,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 
+import '../models/booklet.dart';
 import '../models/entry.dart';
 import '../models/entry_format.dart';
 
@@ -169,6 +170,8 @@ class JournalStore extends ChangeNotifier {
     final tags = <String>{for (final e in _visible) ...e.tags};
     return tags.toList()..sort(_compareText);
   }
+
+  List<Booklet> get booklets => buildBooklets(_visible);
 
   List<String> get allSeries {
     final names = <String>{

@@ -89,31 +89,53 @@ class _BookPagerState extends State<BookPager>
     _goTo(target.clamp(_dragFrom - 1, _dragFrom + 1));
   }
 
-  Widget _turning(Widget page, double frac) {
-    final angle = frac * math.pi * 0.72;
-    if (angle >= math.pi / 2) return const SizedBox.shrink();
-    return Transform(
-      alignment: Alignment.centerLeft,
-      transform: Matrix4.identity()
-        ..setEntry(3, 2, 0.0011)
-        ..rotateY(angle),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          page,
-          IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [
-                    Colors.black.withValues(alpha: frac * 0.25),
-                    Colors.transparent,
-                  ],
-                ),
+  Widget _turning(Widget page, double frac, Size size) {
+    if (frac <= 0) return page;
+    final theta = frac * math.pi;
+    final curl = 0.6 * math.sin(frac * math.pi);
+    final stripWidth = size.width / _strips;
+    final strips = <Widget>[];
+    var x = 0.0;
+    var z = 0.0;
+    for (var k = 0; k < _strips; k++) {
+      final t = (k + 1) / _strips;
+      final angle = theta * ((1 - curl) + curl * math.pow(t, 1.6));
+      final back = angle > math.pi / 2;
+      final shade = back ? 0.2 : 0.3 * math.sin(angle);
+      strips.add(
+        Transform(
+          transform: Matrix4.identity()
+            ..translateByDouble(x, 0, z, 1)
+            ..rotateY(angle)
+            ..translateByDouble(-k * stripWidth, 0, 0, 1),
+          child: SizedBox.fromSize(
+            size: size,
+            child: ClipRect(
+              clipper: _Strip(k * stripWidth, stripWidth + 1),
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  back ? const ColoredBox(color: kPaperBack) : page,
+                  IgnorePointer(
+                    child: ColoredBox(
+                      color: Colors.black.withValues(alpha: shade),
+                    ),
+                  ),
+                ],
               ),
             ),
           ),
-        ],
+        ),
+      );
+      x += stripWidth * math.cos(angle);
+      z -= stripWidth * math.sin(angle);
+    }
+    return ClipRect(
+      clipper: const _FromSpine(),
+      child: Transform(
+        alignment: Alignment.centerLeft,
+        transform: Matrix4.identity()..setEntry(3, 2, 0.0011),
+        child: Stack(fit: StackFit.expand, children: strips),
       ),
     );
   }
@@ -158,7 +180,11 @@ class _BookPagerState extends State<BookPager>
                     ),
                   KeyedSubtree(
                     key: ValueKey(i),
-                    child: _turning(widget.pages[i], hasNext ? frac : 0),
+                    child: _turning(
+                      widget.pages[i],
+                      hasNext ? frac : 0,
+                      box.biggest,
+                    ),
                   ),
                 ],
               );
@@ -168,4 +194,31 @@ class _BookPagerState extends State<BookPager>
       },
     );
   }
+}
+
+const kPaperBack = Color(0xFFE4DAC4);
+const _strips = 12;
+
+class _Strip extends CustomClipper<Rect> {
+  const _Strip(this.left, this.width);
+
+  final double left;
+  final double width;
+
+  @override
+  Rect getClip(Size size) => Rect.fromLTWH(left, 0, width, size.height);
+
+  @override
+  bool shouldReclip(_Strip old) => old.left != left || old.width != width;
+}
+
+class _FromSpine extends CustomClipper<Rect> {
+  const _FromSpine();
+
+  @override
+  Rect getClip(Size size) =>
+      Rect.fromLTRB(0, -100, size.width + 100, size.height + 100);
+
+  @override
+  bool shouldReclip(_FromSpine old) => false;
 }

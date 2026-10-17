@@ -199,4 +199,23 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('CONTENTS'), findsOneWidget);
   });
+
+  testWidgets('a page bends while it turns, then lies flat again', (
+    tester,
+  ) async {
+    await open(tester);
+    await tester.tap(find.byKey(const ValueKey('booklet-JP')));
+    await tester.pumpAndSettle();
+    final cover = tester.getCenter(find.byType(BookPager));
+    final turning = await tester.startGesture(cover);
+    await turning.moveBy(const Offset(-60, 0));
+    await turning.moveBy(const Offset(-40, 0));
+    await tester.pump();
+    expect(find.text('Swipe to turn the page'), findsAtLeastNWidgets(2));
+    expect(find.text('CONTENTS'), findsOneWidget);
+    await turning.up();
+    await tester.pumpAndSettle();
+    expect(find.text('Swipe to turn the page'), findsOneWidget);
+    expect(find.text('CONTENTS'), findsNothing);
+  });
 }

@@ -38,6 +38,10 @@ void main() {
     expect(isNewerVersion('v0.2.0', '0.2.0'), isFalse);
     expect(isNewerVersion('v0.1.9', '0.2.0'), isFalse);
     expect(isNewerVersion('nightly', '0.2.0'), isFalse);
+    expect(isNewerVersion('v1.1.0', '1.1.0-beta.1'), isTrue);
+    expect(isNewerVersion('v1.1.0-beta.2', '1.1.0-beta.1'), isFalse);
+    expect(isNewerVersion('v1.0.0', '1.1.0-beta.1'), isFalse);
+    expect(isNewerVersion('v1.1.1', '1.1.0-beta.1'), isTrue);
   });
 
   test('a newer release points at its APK', () async {

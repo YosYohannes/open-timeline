@@ -9,6 +9,7 @@ import '../app/navigation.dart';
 import '../app/store_scope.dart';
 import '../settings/account_actions.dart';
 import '../settings/settings_page.dart';
+import '../stamp/stamp_scan.dart';
 import 'calendar_page.dart';
 import 'filter_sheet.dart';
 import 'filters.dart';
@@ -90,6 +91,38 @@ class _HomePageState extends State<HomePage> {
     if (email == null || !mounted) return;
     final s = store.settings;
     await store.updateSettings(s.copyWith(me: email));
+  }
+
+  void _showAddMenu() {
+    showModalBottomSheet<void>(
+      context: context,
+      showDragHandle: true,
+      builder: (ctx) => SafeArea(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.edit_note),
+              title: const Text('New post'),
+              onTap: () {
+                Navigator.pop(ctx);
+                newEntry(context);
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.document_scanner_outlined),
+              title: const Text('Scan a stamp'),
+              subtitle: const Text('Add it to your collection'),
+              onTap: () {
+                Navigator.pop(ctx);
+                newStamp(context);
+              },
+            ),
+            const SizedBox(height: 8),
+          ],
+        ),
+      ),
+    );
   }
 
   Future<void> _checkForUpdate() async {
@@ -298,8 +331,8 @@ class _HomePageState extends State<HomePage> {
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        tooltip: 'New post',
-        onPressed: () => newEntry(context),
+        tooltip: 'New',
+        onPressed: _showAddMenu,
         child: const Icon(Icons.add),
       ),
       bottomNavigationBar: NavigationBar(

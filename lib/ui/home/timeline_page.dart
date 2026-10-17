@@ -4,6 +4,7 @@ import '../../models/entry.dart';
 import '../app/navigation.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../stamp/stamp_widgets.dart';
 import '../widgets/format.dart';
 import '../widgets/media_tile.dart';
 import 'filters.dart';
@@ -31,14 +32,18 @@ class TimelinePage extends StatelessWidget {
           final past = _onThisDay(all);
           if (past.isNotEmpty) items.add(_OnThisDay(past));
         }
-        DateTime? lastDay;
+        final byDay = <DateTime, List<Entry>>{};
         for (final e in visible) {
-          final day = dayOf(e.wallTime);
-          if (lastDay != day) {
-            items.add(day);
-            lastDay = day;
-          }
-          items.add(e);
+          byDay.putIfAbsent(dayOf(e.wallTime), () => []).add(e);
+        }
+        for (final d in byDay.entries) {
+          items.add(d.key);
+          final stamps = d.value
+              .where((e) => e.isCollectible)
+              .toList()
+              .reversed;
+          if (stamps.isNotEmpty) items.add(StampStrip(stamps: stamps.toList()));
+          items.addAll(d.value.where((e) => !e.isCollectible));
         }
 
         return ListView.builder(
@@ -48,6 +53,7 @@ class TimelinePage extends StatelessWidget {
             final item = items[i];
             if (item is _OnThisDay) return _OnThisDayRow(entries: item.entries);
             if (item is DateTime) return _DayHeader(day: item);
+            if (item is StampStrip) return item;
             return EntryCard(entry: item as Entry);
           },
         );
@@ -61,6 +67,7 @@ class TimelinePage extends StatelessWidget {
         all
             .where(
               (e) =>
+                  !e.isCollectible &&
                   e.wallTime.month == now.month &&
                   e.wallTime.day == now.day &&
                   e.wallTime.year < now.year,
@@ -104,6 +111,7 @@ class EntryCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    if (entry.isCollectible) return StampTile(entry: entry);
     final theme = Theme.of(context);
     final place = placeText(entry);
     final text = entry.text.trim();

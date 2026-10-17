@@ -2,17 +2,21 @@ import 'package:flutter/material.dart';
 
 import '../../models/entry.dart';
 
+enum ContentShow { all, posts, collection }
+
 class EntryFilter extends ChangeNotifier {
   DateTimeRange? _range;
   String? _tag;
   String? _author;
   String _query = '';
+  ContentShow _show = ContentShow.all;
 
   /// Inclusive calendar days, compared against `wallTime`.
   DateTimeRange? get range => _range;
   String? get tag => _tag;
   String? get author => _author;
   String get query => _query;
+  ContentShow get show => _show;
 
   bool get active =>
       _range != null ||
@@ -40,6 +44,12 @@ class EntryFilter extends ChangeNotifier {
     notifyListeners();
   }
 
+  set show(ContentShow value) {
+    if (_show == value) return;
+    _show = value;
+    notifyListeners();
+  }
+
   set query(String value) {
     if (_query == value) return;
     _query = value;
@@ -47,7 +57,8 @@ class EntryFilter extends ChangeNotifier {
   }
 
   void clear() {
-    if (!active && _query.isEmpty) return;
+    if (!active && _query.isEmpty && _show == ContentShow.all) return;
+    _show = ContentShow.all;
     _range = null;
     _tag = null;
     _author = null;
@@ -56,6 +67,8 @@ class EntryFilter extends ChangeNotifier {
   }
 
   bool matches(Entry e) {
+    if (_show == ContentShow.posts && e.isCollectible) return false;
+    if (_show == ContentShow.collection && !e.isCollectible) return false;
     final r = _range;
     if (r != null) {
       final day = dayOf(e.wallTime);
@@ -73,6 +86,8 @@ class EntryFilter extends ChangeNotifier {
         e.title,
         e.text,
         e.place ?? '',
+        e.series,
+        e.country ?? '',
         ...e.tags,
       ].join('\n').toLowerCase();
       if (!hay.contains(q)) return false;

@@ -170,6 +170,14 @@ class JournalStore extends ChangeNotifier {
     return tags.toList()..sort(_compareText);
   }
 
+  List<String> get allSeries {
+    final names = <String>{
+      for (final e in _visible)
+        if (e.isCollectible && e.series.isNotEmpty) e.series,
+    };
+    return names.toList()..sort(_compareText);
+  }
+
   Map<String, int> get tagCounts {
     final counts = <String, int>{};
     for (final e in _visible) {
@@ -267,6 +275,7 @@ class JournalStore extends ChangeNotifier {
     final tombstone = _normalized(
       Entry(
         id: old.id,
+        kind: old.kind,
         author: old.author,
         time: old.time,
         utcOffsetMinutes: old.utcOffsetMinutes,

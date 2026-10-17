@@ -24,6 +24,9 @@ bool isVideo(String fileName) =>
 bool isImage(String fileName) =>
     imageExtensions.contains(extensionOf(fileName));
 
+const kindPost = 'post';
+const kindStamp = 'stamp';
+
 class Entry {
   const Entry({
     required this.id,
@@ -41,12 +44,20 @@ class Entry {
     required this.updated,
     this.deleted = false,
     this.conflict = false,
+    this.kind = kindPost,
+    this.series = '',
+    this.country,
   });
 
-  factory Entry.create({required String author, DateTime? now}) {
+  factory Entry.create({
+    required String author,
+    DateTime? now,
+    String kind = kindPost,
+  }) {
     final t = now ?? DateTime.now();
     return Entry(
       id: newId(t),
+      kind: kind,
       author: author,
       time: t.toUtc(),
       utcOffsetMinutes: t.timeZoneOffset.inMinutes,
@@ -89,6 +100,18 @@ class Entry {
 
   final bool conflict;
 
+  final String kind;
+
+  /// Stamps only: the set a stamp belongs to, such as "JR West eki".
+  final String series;
+
+  /// Stamps only: ISO 3166 alpha-2 code.
+  final String? country;
+
+  bool get isStamp => kind == kindStamp;
+
+  bool get isCollectible => kind != kindPost;
+
   /// UTC-flagged but holds the local clock reading: format it, never convert it.
   DateTime get wallTime =>
       time.toUtc().add(Duration(minutes: utcOffsetMinutes));
@@ -119,6 +142,8 @@ class Entry {
     DateTime? updated,
     bool? deleted,
     bool? conflict,
+    String? series,
+    Object? country = _keep,
   }) {
     return Entry(
       id: id,
@@ -136,6 +161,9 @@ class Entry {
       updated: updated ?? this.updated,
       deleted: deleted ?? this.deleted,
       conflict: conflict ?? this.conflict,
+      kind: kind,
+      series: series ?? this.series,
+      country: identical(country, _keep) ? this.country : country as String?,
     );
   }
 }

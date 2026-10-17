@@ -6,7 +6,10 @@ import '../widgets/format.dart';
 import 'filters.dart';
 
 bool hasSheetFilters(EntryFilter f) =>
-    f.range != null || f.tag != null || f.author != null;
+    f.range != null ||
+    f.tag != null ||
+    f.author != null ||
+    f.show != ContentShow.all;
 
 Future<void> showFilterSheet(BuildContext context, EntryFilter filter) {
   return showModalBottomSheet<void>(
@@ -29,61 +32,83 @@ class _FilterSheet extends StatelessWidget {
         listenable: filter,
         builder: (context, _) {
           final range = filter.range;
-          return Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(24, 0, 12, 4),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        'Filters',
-                        style: theme.textTheme.titleMedium,
+          return SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(24, 0, 12, 4),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Filters',
+                          style: theme.textTheme.titleMedium,
+                        ),
                       ),
-                    ),
-                    if (hasSheetFilters(filter))
-                      TextButton(
-                        onPressed: () {
-                          filter.range = null;
-                          filter.tag = null;
-                          filter.author = null;
-                        },
-                        child: const Text('Clear'),
-                      ),
-                  ],
+                      if (hasSheetFilters(filter))
+                        TextButton(
+                          onPressed: () {
+                            filter.range = null;
+                            filter.tag = null;
+                            filter.author = null;
+                            filter.show = ContentShow.all;
+                          },
+                          child: const Text('Clear'),
+                        ),
+                    ],
+                  ),
                 ),
-              ),
-              _row(
-                icon: Icons.date_range,
-                title: 'Dates',
-                value: range == null
-                    ? null
-                    : range.start == range.end
-                    ? formatShortDay(range.start)
-                    : '${formatShortDay(range.start)} – ${formatShortDay(range.end)}',
-                empty: 'Any date',
-                onTap: () => _pickRange(context),
-                onClear: () => filter.range = null,
-              ),
-              _row(
-                icon: Icons.sell_outlined,
-                title: 'Tag',
-                value: filter.tag == null ? null : '#${filter.tag}',
-                empty: 'Any tag',
-                onTap: () => _pickTag(context),
-                onClear: () => filter.tag = null,
-              ),
-              _row(
-                icon: Icons.person_outline,
-                title: 'Author',
-                value: filter.author,
-                empty: 'Everyone',
-                onTap: () => _pickAuthor(context),
-                onClear: () => filter.author = null,
-              ),
-              const SizedBox(height: 8),
-            ],
+                _row(
+                  icon: Icons.date_range,
+                  title: 'Dates',
+                  value: range == null
+                      ? null
+                      : range.start == range.end
+                      ? formatShortDay(range.start)
+                      : '${formatShortDay(range.start)} – ${formatShortDay(range.end)}',
+                  empty: 'Any date',
+                  onTap: () => _pickRange(context),
+                  onClear: () => filter.range = null,
+                ),
+                _row(
+                  icon: Icons.sell_outlined,
+                  title: 'Tag',
+                  value: filter.tag == null ? null : '#${filter.tag}',
+                  empty: 'Any tag',
+                  onTap: () => _pickTag(context),
+                  onClear: () => filter.tag = null,
+                ),
+                _row(
+                  icon: Icons.person_outline,
+                  title: 'Author',
+                  value: filter.author,
+                  empty: 'Everyone',
+                  onTap: () => _pickAuthor(context),
+                  onClear: () => filter.author = null,
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: SegmentedButton<ContentShow>(
+                    showSelectedIcon: false,
+                    segments: const [
+                      ButtonSegment(value: ContentShow.all, label: Text('All')),
+                      ButtonSegment(
+                        value: ContentShow.posts,
+                        label: Text('Posts'),
+                      ),
+                      ButtonSegment(
+                        value: ContentShow.collection,
+                        label: Text('Collection'),
+                      ),
+                    ],
+                    selected: {filter.show},
+                    onSelectionChanged: (v) => filter.show = v.first,
+                  ),
+                ),
+                const SizedBox(height: 8),
+              ],
+            ),
           );
         },
       ),

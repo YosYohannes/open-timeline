@@ -16,6 +16,7 @@ import '../../store/journal_store.dart';
 import '../../sync/merge.dart';
 import '../app/store_scope.dart';
 import '../app/theme.dart';
+import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
 import '../widgets/author.dart';
 import '../widgets/format.dart';
@@ -26,10 +27,16 @@ import 'photo_viewer.dart';
 import 'video_prep.dart';
 
 class PostPage extends StatefulWidget {
-  const PostPage({super.key, required this.entry, this.isNew = false});
+  const PostPage({
+    super.key,
+    required this.entry,
+    this.isNew = false,
+    this.scanner,
+  });
 
   final Entry entry;
   final bool isNew;
+  final StampScanner? scanner;
 
   @override
   State<PostPage> createState() => _PostPageState();
@@ -50,6 +57,8 @@ class _PostPageState extends State<PostPage> {
   late final TextEditingController _title;
   late final TextEditingController _text;
   late final TextEditingController _place;
+  late final TextEditingController _series;
+  late final TextEditingController _country;
   final _tagInput = TextEditingController();
   final _tagFocus = FocusNode();
   final _tagFieldKey = GlobalKey();
@@ -76,9 +85,13 @@ class _PostPageState extends State<PostPage> {
     _title = TextEditingController(text: e.title)..addListener(_changed);
     _text = TextEditingController(text: e.text)..addListener(_changed);
     _place = TextEditingController(text: e.place ?? '')..addListener(_changed);
+    _series = TextEditingController(text: e.series)..addListener(_changed);
+    _country = TextEditingController(text: e.country ?? '')
+      ..addListener(_changed);
     _tagInput.addListener(_changed);
     _tags = [...e.tags];
     _media = [...e.media];
+    if (widget.isNew && _isStamp) _imported.addAll(e.media);
     final lastLocated = _store.entries.where((x) => x.hasLocation).firstOrNull;
     if (lastLocated != null) {
       _mapFallback = LatLng(lastLocated.lat!, lastLocated.lon!);
@@ -89,6 +102,8 @@ class _PostPageState extends State<PostPage> {
   void dispose() {
     _text.dispose();
     _place.dispose();
+    _series.dispose();
+    _country.dispose();
     _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
@@ -101,17 +116,26 @@ class _PostPageState extends State<PostPage> {
 
   bool get _hasLocation => _lat != null && _lon != null;
 
+  bool get _isStamp => _original.isStamp;
+
   bool get _dirty {
     final o = _original;
     return _timeChanged ||
         _text.text != o.text ||
         _title.text.trim() != o.title.trim() ||
         _place.text.trim() != (o.place ?? '').trim() ||
+        _series.text.trim() != o.series ||
+        _countryCode != o.country ||
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
         !listEquals(_tags, o.tags) ||
         !listEquals(_media, o.media);
+  }
+
+  String? get _countryCode {
+    final c = _country.text.trim().toUpperCase();
+    return c.isEmpty ? null : c;
   }
 
   bool get _isMine =>
@@ -127,6 +151,8 @@ class _PostPageState extends State<PostPage> {
       lat: _lat,
       lon: _lon,
       place: place.isEmpty ? null : place,
+      series: _series.text.trim(),
+      country: _countryCode,
       color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
@@ -211,7 +237,9 @@ class _PostPageState extends State<PostPage> {
       ),
     );
     if (discard == true) {
-      _deleteFiles(_imported.where((n) => !_original.media.contains(n)));
+      _deleteFiles(
+        _imported.where((n) => widget.isNew || !_original.media.contains(n)),
+      );
       if (mounted) Navigator.of(context).pop();
     }
   }
@@ -230,9 +258,11 @@ class _PostPageState extends State<PostPage> {
     final ok = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete this post?'),
-        content: const Text(
-          'The post and its photos and videos will be removed from this phone.',
+        title: Text(_isStamp ? 'Delete this stamp?' : 'Delete this post?'),
+        content: Text(
+          _isStamp
+              ? 'The stamp and its image will be removed from this phone.'
+              : 'The post and its photos and videos will be removed from this phone.',
         ),
         actions: [
           TextButton(
@@ -295,6 +325,47 @@ class _PostPageState extends State<PostPage> {
       _lat = lat;
       _lon = lon;
     });
+    if (_isStamp) _fillCountry(lat, lon);
+  }
+
+  Future<void> _fillCountry(double lat, double lon) async {
+    if (_country.text.trim().isNotEmpty) return;
+    try {
+      final marks = await _geocoding
+          .placemarkFromCoordinates(lat, lon)
+          .timeout(const Duration(seconds: 8));
+      final code = marks.firstOrNull?.isoCountryCode;
+      if (mounted && code != null && _country.text.trim().isEmpty) {
+        _country.text = code;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _rescan() async {
+    if (_mediaBusy) return;
+    setState(() => _mediaBusy = true);
+    try {
+      final file = await scanWithMessage(
+        context,
+        widget.scanner ?? PlatformStampScanner(),
+      );
+      if (file == null) return;
+      try {
+        final name = await _store.importMedia(_original, file);
+        final old = _media.toList();
+        _imported.add(name);
+        if (mounted) setState(() => _media = [name]);
+        _deleteFiles(old.where(_imported.contains));
+      } finally {
+        try {
+          await file.delete();
+        } catch (_) {}
+      }
+    } catch (e) {
+      _snack("Couldn't scan: ${_short(e)}");
+    } finally {
+      if (mounted) setState(() => _mediaBusy = false);
+    }
   }
 
   void _clearLocation() {
@@ -569,7 +640,11 @@ class _PostPageState extends State<PostPage> {
       },
       child: Scaffold(
         appBar: AppBar(
-          title: Text(widget.isNew ? 'New post' : 'Post'),
+          title: Text(
+            _isStamp
+                ? (widget.isNew ? 'New stamp' : 'Stamp')
+                : (widget.isNew ? 'New post' : 'Post'),
+          ),
           actions: [
             FilledButton(
               onPressed: _saving || !_dirty ? null : _save,
@@ -621,6 +696,10 @@ class _PostPageState extends State<PostPage> {
                   ],
                 ),
               ),
+              if (_isStamp) ...[
+                _stampPreview(theme),
+                const SizedBox(height: 16),
+              ],
               ActionRow(
                 items: [
                   ActionItem(
@@ -643,22 +722,53 @@ class _PostPageState extends State<PostPage> {
                 controller: _title,
                 textCapitalization: TextCapitalization.sentences,
                 textInputAction: TextInputAction.next,
-                decoration: const InputDecoration(
-                  hintText: 'Title (optional)',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: _isStamp ? 'Stamp name' : 'Title (optional)',
+                  border: const OutlineInputBorder(),
                 ),
               ),
               const SizedBox(height: 12),
 
+              if (_isStamp) ...[
+                TextField(
+                  controller: _series,
+                  textCapitalization: TextCapitalization.words,
+                  textInputAction: TextInputAction.next,
+                  decoration: const InputDecoration(
+                    labelText: 'Series',
+                    hintText: 'e.g. JR West eki stamps',
+                    prefixIcon: Icon(Icons.collections_bookmark_outlined),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                  ),
+                ),
+                _seriesSuggestions(),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _country,
+                  textCapitalization: TextCapitalization.characters,
+                  maxLength: 2,
+                  decoration: const InputDecoration(
+                    labelText: 'Country code',
+                    hintText: 'JP, TW … filled in from the location',
+                    prefixIcon: Icon(Icons.public),
+                    border: OutlineInputBorder(),
+                    isDense: true,
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+
               TextField(
                 controller: _text,
-                minLines: 6,
+                minLines: _isStamp ? 3 : 6,
                 maxLines: null,
                 keyboardType: TextInputType.multiline,
                 textCapitalization: TextCapitalization.sentences,
-                decoration: const InputDecoration(
-                  hintText: 'What happened?',
-                  border: OutlineInputBorder(),
+                decoration: InputDecoration(
+                  hintText: _isStamp ? 'Notes (optional)' : 'What happened?',
+                  border: const OutlineInputBorder(),
                   alignLabelWithHint: true,
                 ),
               ),
@@ -769,84 +879,160 @@ class _PostPageState extends State<PostPage> {
               _tagSuggestions(),
               const SizedBox(height: 20),
 
-              _sectionTitle(theme, 'Photos & videos'),
-              ActionRow(
-                items: [
-                  ActionItem(
-                    icon: Icons.photo_camera_outlined,
-                    label: 'Photo',
-                    onPressed: _mediaBusy ? null : _addPhoto,
-                  ),
-                  ActionItem(
-                    icon: Icons.videocam_outlined,
-                    label: 'Video',
-                    onPressed: _mediaBusy ? null : _addVideo,
-                  ),
-                  ActionItem(
-                    icon: Icons.photo_library_outlined,
-                    label: 'Gallery',
-                    onPressed: _mediaBusy ? null : _addFromGallery,
-                  ),
-                ],
-              ),
-              if (_mediaBusy)
-                const Padding(
-                  padding: EdgeInsets.only(top: 8),
-                  child: LinearProgressIndicator(),
+              if (!_isStamp) ...[
+                _sectionTitle(theme, 'Photos & videos'),
+                ActionRow(
+                  items: [
+                    ActionItem(
+                      icon: Icons.photo_camera_outlined,
+                      label: 'Photo',
+                      onPressed: _mediaBusy ? null : _addPhoto,
+                    ),
+                    ActionItem(
+                      icon: Icons.videocam_outlined,
+                      label: 'Video',
+                      onPressed: _mediaBusy ? null : _addVideo,
+                    ),
+                    ActionItem(
+                      icon: Icons.photo_library_outlined,
+                      label: 'Gallery',
+                      onPressed: _mediaBusy ? null : _addFromGallery,
+                    ),
+                  ],
                 ),
-              if (_media.isNotEmpty) ...[
-                const SizedBox(height: 12),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  children: [
-                    for (final m in _media)
-                      SizedBox(
-                        width: 104,
-                        height: 104,
-                        child: Stack(
-                          children: [
-                            MediaTile(
-                              file: _store.mediaFile(_original, m),
-                              name: m,
-                              size: 104,
-                              radius: kRadius,
-                              onTap: () => _openMedia(m),
-                            ),
-                            Positioned(
-                              top: 2,
-                              right: 2,
-                              child: Material(
-                                color: Colors.black54,
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: kBorderRadius,
-                                ),
-                                child: InkWell(
-                                  customBorder: RoundedRectangleBorder(
+                if (_mediaBusy)
+                  const Padding(
+                    padding: EdgeInsets.only(top: 8),
+                    child: LinearProgressIndicator(),
+                  ),
+                if (_media.isNotEmpty) ...[
+                  const SizedBox(height: 12),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final m in _media)
+                        SizedBox(
+                          width: 104,
+                          height: 104,
+                          child: Stack(
+                            children: [
+                              MediaTile(
+                                file: _store.mediaFile(_original, m),
+                                name: m,
+                                size: 104,
+                                radius: kRadius,
+                                onTap: () => _openMedia(m),
+                              ),
+                              Positioned(
+                                top: 2,
+                                right: 2,
+                                child: Material(
+                                  color: Colors.black54,
+                                  shape: RoundedRectangleBorder(
                                     borderRadius: kBorderRadius,
                                   ),
-                                  onTap: () => setState(
-                                    () => _media = [..._media]..remove(m),
-                                  ),
-                                  child: const Padding(
-                                    padding: EdgeInsets.all(4),
-                                    child: Icon(
-                                      Icons.close,
-                                      size: 16,
-                                      color: Colors.white,
+                                  child: InkWell(
+                                    customBorder: RoundedRectangleBorder(
+                                      borderRadius: kBorderRadius,
+                                    ),
+                                    onTap: () => setState(
+                                      () => _media = [..._media]..remove(m),
+                                    ),
+                                    child: const Padding(
+                                      padding: EdgeInsets.all(4),
+                                      child: Icon(
+                                        Icons.close,
+                                        size: 16,
+                                        color: Colors.white,
+                                      ),
                                     ),
                                   ),
                                 ),
                               ),
-                            ),
-                          ],
+                            ],
+                          ),
                         ),
-                      ),
-                  ],
-                ),
+                    ],
+                  ),
+                ],
               ],
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _stampPreview(ThemeData theme) {
+    final name = _media.firstOrNull;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Container(
+          height: 240,
+          decoration: BoxDecoration(
+            color: Colors.black,
+            borderRadius: kBorderRadius,
+            border: Border.all(color: theme.colorScheme.outlineVariant),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: name == null
+              ? null
+              : InkWell(
+                  onTap: () => _openMedia(name),
+                  child: Image.file(
+                    _store.mediaFile(_original, name),
+                    fit: BoxFit.contain,
+                    errorBuilder: (_, _, _) =>
+                        const Center(child: Icon(Icons.broken_image_outlined)),
+                  ),
+                ),
+        ),
+        const SizedBox(height: 8),
+        ActionRow(
+          items: [
+            ActionItem(
+              icon: Icons.document_scanner_outlined,
+              label: 'Scan again',
+              onPressed: _mediaBusy ? null : _rescan,
+            ),
+          ],
+        ),
+        if (_mediaBusy)
+          const Padding(
+            padding: EdgeInsets.only(top: 8),
+            child: LinearProgressIndicator(),
+          ),
+      ],
+    );
+  }
+
+  Widget _seriesSuggestions() {
+    final typed = _series.text.trim().toLowerCase();
+    final suggestions = _store.allSeries
+        .where((t) => t.toLowerCase() != typed)
+        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
+        .take(10)
+        .toList();
+    if (suggestions.isEmpty) return const SizedBox.shrink();
+    return Padding(
+      padding: const EdgeInsets.only(top: 8),
+      child: SizedBox(
+        height: 36,
+        child: ListView(
+          scrollDirection: Axis.horizontal,
+          children: [
+            for (final t in suggestions)
+              Padding(
+                padding: const EdgeInsets.only(right: 8),
+                child: ActionChip(
+                  label: Text(t),
+                  visualDensity: VisualDensity.compact,
+                  onPressed: () => _series.text = t,
+                ),
+              ),
+          ],
         ),
       ),
     );

@@ -40,6 +40,10 @@ class SyncResult {
       'conflicts: $conflicts, errors: $errors)';
 }
 
+/// Bumped whenever posts gain fields, so phones that stored posts read by an older
+/// app fetch them again.
+const _syncSchema = 2;
+
 /// Two-way sync between a [JournalStore] and the shared Drive folder.
 ///
 /// Bookkeeping lives in [JournalStore.syncData]:
@@ -48,6 +52,9 @@ class SyncResult {
 ///                Drive file this phone has seen or written. A listed file that matches
 ///                its record is a no-op, which is what makes the overlap safe.
 ///   `readme`     true once README.md exists in the folder
+///   `schema`     the post format this phone's local copy was last read with; an older
+///                app reads posts without the fields added later and stores them that
+///                way, so a newer one reads every post file again
 ///
 /// Order of a run: check folder, README, year folders, pull, push, download media.
 /// One failing file never stops the others.
@@ -131,6 +138,8 @@ class SyncEngine {
       return;
     }
 
+    await _refreshAfterUpgrade();
+
     try {
       await _pull();
     } catch (e) {
@@ -141,6 +150,19 @@ class SyncEngine {
 
     await _push();
     await _downloadMedia();
+    await store.saveState();
+  }
+
+  Future<void> _refreshAfterUpgrade() async {
+    if (store.syncData['schema'] == _syncSchema) return;
+    store.syncData.remove('watermark');
+    for (final name in [
+      for (final k in _files.keys)
+        if (k.endsWith('.md')) k,
+    ]) {
+      _files.remove(name);
+    }
+    store.syncData['schema'] = _syncSchema;
     await store.saveState();
   }
 

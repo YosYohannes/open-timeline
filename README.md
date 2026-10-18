@@ -74,6 +74,10 @@ media: ["20260701-100000-z000_aaaa.png"]
 
 There is no compression or encryption, by design. Any text editor opens a post, and the folder also works as an [Obsidian](https://obsidian.md) vault.
 
+## Credits
+
+The app icon is based on the `diary` icon from [Arcticons](https://github.com/Arcticons-Team/Arcticons), licensed [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The coloured version (filled shapes in kraft paper colours) is a modification of it and is shared under the same licence. The single-colour themed icon follows the original lines.
+
 ## Privacy and terms
 
 - [Privacy policy](PRIVACY.md)

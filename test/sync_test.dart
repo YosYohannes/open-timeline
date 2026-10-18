@@ -996,4 +996,77 @@ void main() {
       expect(onDrive(p.id).text, 'hand placed');
     });
   });
+
+  group('after an app update', () {
+    test('a stamp an older app read as a post becomes a stamp again', () async {
+      final stamp = Entry.create(author: 'a@x', kind: kindStamp).copyWith(
+        series: 'JR West eki',
+        country: 'JP',
+        size: sizeLarge,
+        blend: true,
+        text: 'Osaka',
+      );
+      await a.store.save(stamp);
+      expectNoErrors(await a.sync());
+      expectNoErrors(await b.sync());
+      expect(b.post(stamp.id).isStamp, isTrue);
+
+      // What an older app leaves behind: the same file, minus the new fields,
+      // recorded as already synced and without a schema in the sync state.
+      final plain = Entry(
+        id: stamp.id,
+        author: stamp.author,
+        time: stamp.time,
+        utcOffsetMinutes: stamp.utcOffsetMinutes,
+        text: stamp.text,
+        updated: stamp.updated,
+      );
+      await b.store.writeSynced(plain, dirty: false);
+      await b.store.setBase(plain);
+      b.store.syncData.remove('schema');
+      await b.store.saveState();
+      expect(b.post(stamp.id).isStamp, isFalse);
+
+      expectNoErrors(await b.sync());
+      final back = b.post(stamp.id);
+      expect(back.isStamp, isTrue);
+      expect(back.series, 'JR West eki');
+      expect(back.country, 'JP');
+      expect(back.size, sizeLarge);
+      expect(back.blend, isTrue);
+      expect(onDrive(stamp.id).isStamp, isTrue);
+      expect(b.store.dirtyIds, isEmpty);
+    });
+
+    test('unsynced edits survive the refresh', () async {
+      final stamp = Entry.create(
+        author: 'a@x',
+        kind: kindStamp,
+      ).copyWith(series: 'Kintetsu', country: 'JP', text: 'one');
+      await a.store.save(stamp);
+      expectNoErrors(await a.sync());
+      expectNoErrors(await b.sync());
+
+      final plain = Entry(
+        id: stamp.id,
+        author: stamp.author,
+        time: stamp.time,
+        utcOffsetMinutes: stamp.utcOffsetMinutes,
+        text: stamp.text,
+        updated: stamp.updated,
+      );
+      await b.store.writeSynced(plain, dirty: false);
+      await b.store.setBase(plain);
+      b.store.syncData.remove('schema');
+      await b.edit(stamp.id, (e) => e.copyWith(text: 'two'));
+
+      expectNoErrors(await b.sync());
+      final back = b.post(stamp.id);
+      expect(back.isStamp, isTrue);
+      expect(back.series, 'Kintetsu');
+      expect(back.text, 'two');
+      expect(onDrive(stamp.id).text, 'two');
+      expect(onDrive(stamp.id).isStamp, isTrue);
+    });
+  });
 }

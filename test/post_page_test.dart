@@ -174,6 +174,58 @@ void main() {
     expect(store.byId(_id)!.title, 'Canal walk');
   });
 
+  Entry stampOf(List<String> tags) => Entry(
+    id: _id,
+    kind: kindStamp,
+    author: 'me@example.com',
+    time: DateTime.utc(2026, 10, 16, 12),
+    utcOffsetMinutes: 0,
+    series: 'Old trip',
+    country: 'JP',
+    tags: tags,
+    media: const [_photo],
+    updated: DateTime.utc(2026, 10, 16, 13),
+  );
+
+  testWidgets('a post has no event field', (tester) async {
+    await openPost(tester, existing: _post());
+    expect(find.widgetWithText(TextField, 'Event'), findsNothing);
+  });
+
+  testWidgets('a stamp keeps its event among its tags, whatever it is', (
+    tester,
+  ) async {
+    await openPost(tester, existing: stampOf(['Old trip', 'food']));
+    expect(find.byKey(const ValueKey('event-tag')), findsOneWidget);
+    expect(find.text('#food'), findsOneWidget);
+    expect(saveEnabled(tester), isFalse, reason: 'already in its tags');
+
+    final field = find.widgetWithText(TextField, 'Event');
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.enterText(field, 'Kyoto trip');
+    await tester.pump();
+    expect(find.text('#Kyoto trip'), findsOneWidget);
+    expect(saveEnabled(tester), isTrue);
+    await tapSave(tester);
+    expect(store.byId(_id)!.series, 'Kyoto trip');
+    expect(store.byId(_id)!.tags, ['Kyoto trip', 'food']);
+    expect(store.recentTags, containsAll(['Kyoto trip', 'food']));
+  });
+
+  testWidgets('an older stamp gets its event as a tag once it is saved', (
+    tester,
+  ) async {
+    await openPost(tester, existing: stampOf(['food']));
+    expect(saveEnabled(tester), isFalse);
+    await tester.ensureVisible(find.text('Large'));
+    await tester.pump();
+    await tester.tap(find.text('Large'));
+    await tester.pump();
+    await tapSave(tester);
+    expect(store.byId(_id)!.tags, ['Old trip', 'food']);
+  });
+
   testWidgets('a conflicted post shows the warning; saving clears the flag', (
     tester,
   ) async {
@@ -369,6 +421,8 @@ void main() {
     await tester.pump();
     expect(find.text('#city'), findsOneWidget);
     expect(find.text('#sea'), findsNothing);
+    await tester.ensureVisible(find.text('#city'));
+    await tester.pump();
     await tester.tap(find.text('#city'));
     await tester.pump();
     expect(find.byType(InputChip), findsNWidgets(2));

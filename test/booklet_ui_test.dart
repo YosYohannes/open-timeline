@@ -91,7 +91,7 @@ void main() {
     expect(find.text('TAIWAN'), findsOneWidget);
     expect(find.text('5 stamps'), findsOneWidget);
     expect(find.text('1 stamp'), findsOneWidget);
-    expect(find.text('2 series'), findsOneWidget);
+    expect(find.text('2 events'), findsOneWidget);
   });
 
   testWidgets('without stamps the menu invites a first scan', (tester) async {

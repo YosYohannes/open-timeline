@@ -117,7 +117,10 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
       _syncSeriesList();
       if (_seriesFocus.hasFocus) _revealFocused();
     });
-    _tags = [...e.tags];
+    _tags = [
+      for (final t in e.tags)
+        if (!_isEvent(t, e)) t,
+    ];
     _media = [...e.media];
     if (widget.isNew && _isStamp) _imported.addAll(e.media);
     final lastLocated = _store.entries.where((x) => x.hasLocation).firstOrNull;
@@ -157,6 +160,20 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
 
   bool get _isStamp => _original.isStamp;
 
+  bool _isEvent(String tag, Entry e) =>
+      e.isStamp &&
+      e.series.isNotEmpty &&
+      tag.toLowerCase() == e.series.toLowerCase();
+
+  String get _event => _isStamp ? _series.text.trim() : '';
+
+  /// A stamp's event is also one of its tags, so posts can use it too.
+  List<String> get _allTags => [
+    if (_event.isNotEmpty) _event,
+    for (final t in _tags)
+      if (t.toLowerCase() != _event.toLowerCase()) t,
+  ];
+
   bool get _dirty {
     final o = _original;
     return _timeChanged ||
@@ -170,7 +187,10 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
-        !listEquals(_tags, o.tags) ||
+        !listEquals(_tags, [
+          for (final t in o.tags)
+            if (!_isEvent(t, o)) t,
+        ]) ||
         !listEquals(_media, o.media);
   }
 
@@ -182,7 +202,7 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
     var e = _original.copyWith(
       title: _title.text.trim(),
       text: _text.text,
-      tags: List.of(_tags),
+      tags: _allTags,
       media: List.of(_media),
       lat: _lat,
       lon: _lon,
@@ -578,6 +598,7 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
   void _addTag(String raw) {
     final t = normalizeTag(raw);
     if (t == null) return;
+    if (t.toLowerCase() == _event.toLowerCase()) return;
     if (_tags.any((x) => x.toLowerCase() == t.toLowerCase())) return;
     setState(() => _tags = [..._tags, t]);
   }
@@ -803,40 +824,7 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
               ),
               const SizedBox(height: 16),
               if (_isStamp) ...[
-                CompositedTransformTarget(
-                  key: _seriesKey,
-                  link: _seriesLink,
-                  child: TextField(
-                    key: const ValueKey('series-field'),
-                    controller: _series,
-                    focusNode: _seriesFocus,
-                    textCapitalization: TextCapitalization.words,
-                    textInputAction: TextInputAction.next,
-                    decoration: InputDecoration(
-                      labelText: 'Series',
-                      hintText: 'e.g. JR West eki stamps',
-                      prefixIcon: const Icon(
-                        Icons.collections_bookmark_outlined,
-                      ),
-                      suffixIcon: _store.seriesUsage.isEmpty
-                          ? null
-                          : IconButton(
-                              key: const ValueKey('series-dropdown'),
-                              icon: Icon(
-                                _seriesFocus.hasFocus
-                                    ? Icons.arrow_drop_up
-                                    : Icons.arrow_drop_down,
-                              ),
-                              tooltip: 'Recent series',
-                              onPressed: () => _seriesFocus.hasFocus
-                                  ? _seriesFocus.unfocus()
-                                  : _seriesFocus.requestFocus(),
-                            ),
-                      border: const OutlineInputBorder(),
-                      isDense: true,
-                    ),
-                  ),
-                ),
+                _eventField(),
               ] else ...[
                 TextField(
                   controller: _title,
@@ -870,6 +858,41 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
               if (_seriesFocus.hasFocus) const SizedBox(height: 200),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _eventField() {
+    return CompositedTransformTarget(
+      key: _seriesKey,
+      link: _seriesLink,
+      child: TextField(
+        key: const ValueKey('series-field'),
+        controller: _series,
+        focusNode: _seriesFocus,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: 'Event',
+          hintText: 'e.g. Kyoto trip',
+          prefixIcon: const Icon(Icons.collections_bookmark_outlined),
+          suffixIcon: _store.seriesUsage.isEmpty
+              ? null
+              : IconButton(
+                  key: const ValueKey('series-dropdown'),
+                  icon: Icon(
+                    _seriesFocus.hasFocus
+                        ? Icons.arrow_drop_up
+                        : Icons.arrow_drop_down,
+                  ),
+                  tooltip: 'Recent events',
+                  onPressed: () => _seriesFocus.hasFocus
+                      ? _seriesFocus.unfocus()
+                      : _seriesFocus.requestFocus(),
+                ),
+          border: const OutlineInputBorder(),
+          isDense: true,
         ),
       ),
     );
@@ -1121,6 +1144,12 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            if (_event.isNotEmpty)
+              Chip(
+                key: const ValueKey('event-tag'),
+                avatar: const Icon(Icons.collections_bookmark_outlined),
+                label: Text('#$_event'),
+              ),
             for (final t in _tags)
               InputChip(
                 label: Text('#$t'),
@@ -1397,7 +1426,7 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
         .trim()
         .replaceAll(RegExp(r'^#+'), '')
         .toLowerCase();
-    final chosen = _tags.map((t) => t.toLowerCase()).toSet();
+    final chosen = _allTags.map((t) => t.toLowerCase()).toSet();
     final suggestions = [
       for (final t in _store.recentTags)
         if (!chosen.contains(t.toLowerCase()) &&

@@ -85,7 +85,11 @@ class BookCover extends StatelessWidget {
                         '$count ${count == 1 ? 'stamp' : 'stamps'}',
                         style: small,
                       ),
-                      Text('${booklet.sections.length} series', style: small),
+                      Text(
+                        '${booklet.sections.length} '
+                        '${booklet.sections.length == 1 ? 'event' : 'events'}',
+                        style: small,
+                      ),
                       if (!compact) ...[
                         SizedBox(height: 18 * s),
                         Text(

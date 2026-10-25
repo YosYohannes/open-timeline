@@ -173,7 +173,7 @@ void main() {
   }
 
   String seriesText(WidgetTester tester) => tester
-      .widget<TextField>(find.widgetWithText(TextField, 'Series'))
+      .widget<TextField>(find.widgetWithText(TextField, 'Event'))
       .controller!
       .text;
 
@@ -216,7 +216,7 @@ void main() {
     expect(find.text('Photos & videos'), findsNothing);
     expect(seriesText(tester), isEmpty);
     await tester.enterText(
-      find.widgetWithText(TextField, 'Series'),
+      find.widgetWithText(TextField, 'Event'),
       'JR West eki',
     );
     await tester.pump();
@@ -259,7 +259,7 @@ void main() {
     await tester.pump();
     expect(find.text('Use 1 stamp'), findsOneWidget);
     await useFound(tester);
-    await tester.enterText(find.widgetWithText(TextField, 'Series'), 'one');
+    await tester.enterText(find.widgetWithText(TextField, 'Event'), 'one');
     await tester.pump();
     await save(tester);
     await settleReal(tester, until: () => shows('1 stamp saved'));
@@ -285,7 +285,7 @@ void main() {
     await pumpUntil(tester, () => cropReady(tester));
     await tester.runAsync(() => tester.tap(find.text('Use crop')));
     await settleReal(tester, until: () => shows('New stamp'));
-    await tester.enterText(find.widgetWithText(TextField, 'Series'), 'hand');
+    await tester.enterText(find.widgetWithText(TextField, 'Event'), 'hand');
     await tester.pump();
     await save(tester);
     await settleReal(tester, until: () => shows('Crop another stamp'));
@@ -340,7 +340,7 @@ void main() {
     await takePhoto(tester);
     await useFound(tester);
     await tester.enterText(
-      find.widgetWithText(TextField, 'Series'),
+      find.widgetWithText(TextField, 'Event'),
       'JR West eki',
     );
     await tester.pump();
@@ -389,7 +389,7 @@ void main() {
     ]);
     await takePhoto(tester);
     await useFound(tester);
-    await tester.enterText(find.widgetWithText(TextField, 'Series'), 'x');
+    await tester.enterText(find.widgetWithText(TextField, 'Event'), 'x');
     await tester.pump();
     final year = Directory(store.root.path)
         .listSync()

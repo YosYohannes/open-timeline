@@ -28,10 +28,6 @@ class TimelinePage extends StatelessWidget {
         if (visible.isEmpty) return _NoMatches(filter: filter);
 
         final items = <Object>[];
-        if (!filter.active) {
-          final past = _onThisDay(all);
-          if (past.isNotEmpty) items.add(_OnThisDay(past));
-        }
         final byDay = <DateTime, List<Entry>>{};
         for (final e in visible) {
           byDay.putIfAbsent(dayOf(e.wallTime), () => []).add(e);
@@ -51,7 +47,6 @@ class TimelinePage extends StatelessWidget {
           itemCount: items.length,
           itemBuilder: (context, i) {
             final item = items[i];
-            if (item is _OnThisDay) return _OnThisDayRow(entries: item.entries);
             if (item is DateTime) return _DayHeader(day: item);
             if (item is StampStrip) return item;
             return EntryCard(entry: item as Entry);
@@ -60,27 +55,6 @@ class TimelinePage extends StatelessWidget {
       },
     );
   }
-
-  static List<Entry> _onThisDay(List<Entry> all) {
-    final now = DateTime.now();
-    final list =
-        all
-            .where(
-              (e) =>
-                  !e.isCollectible &&
-                  e.wallTime.month == now.month &&
-                  e.wallTime.day == now.day &&
-                  e.wallTime.year < now.year,
-            )
-            .toList()
-          ..sort((a, b) => b.wallTime.compareTo(a.wallTime));
-    return list;
-  }
-}
-
-class _OnThisDay {
-  _OnThisDay(this.entries);
-  final List<Entry> entries;
 }
 
 class _DayHeader extends StatelessWidget {
@@ -277,111 +251,6 @@ class _Thumbnail extends StatelessWidget {
             ),
         ],
       ),
-    );
-  }
-}
-
-class _OnThisDayRow extends StatelessWidget {
-  const _OnThisDayRow({required this.entries});
-
-  final List<Entry> entries;
-
-  @override
-  Widget build(BuildContext context) {
-    final theme = Theme.of(context);
-    final store = StoreScope.read(context);
-    final nowYear = DateTime.now().year;
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Padding(
-          padding: const EdgeInsets.fromLTRB(16, 12, 16, 6),
-          child: Row(
-            children: [
-              Icon(Icons.history, size: 18, color: theme.colorScheme.primary),
-              const SizedBox(width: 6),
-              Text(
-                'On this day',
-                style: theme.textTheme.titleSmall?.copyWith(
-                  color: theme.colorScheme.primary,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-            ],
-          ),
-        ),
-        SizedBox(
-          height: 104,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 12),
-            itemCount: entries.length,
-            separatorBuilder: (_, _) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final e = entries[i];
-              final years = nowYear - e.wallTime.year;
-              final firstImage = e.media
-                  .where((m) => isImage(m) || isVideo(m))
-                  .firstOrNull;
-              return SizedBox(
-                width: 250,
-                child: Card(
-                  margin: EdgeInsets.zero,
-                  elevation: 0,
-                  color: theme.colorScheme.primaryContainer.withValues(
-                    alpha: 0.55,
-                  ),
-                  child: InkWell(
-                    onTap: () => openEntry(context, e.id),
-                    child: Padding(
-                      padding: const EdgeInsets.all(10),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  years == 1
-                                      ? '1 year ago'
-                                      : '$years years ago',
-                                  style: theme.textTheme.labelLarge?.copyWith(
-                                    color: theme.colorScheme.onPrimaryContainer,
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                Expanded(
-                                  child: Text(
-                                    e.text.trim().isEmpty
-                                        ? (placeText(e) ?? '(no text)')
-                                        : e.text.trim(),
-                                    maxLines: 3,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: theme.textTheme.bodySmall,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (firstImage != null) ...[
-                            const SizedBox(width: 8),
-                            MediaTile(
-                              file: store.mediaFile(e, firstImage),
-                              name: firstImage,
-                              size: 72,
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
     );
   }
 }

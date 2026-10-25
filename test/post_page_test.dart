@@ -47,13 +47,20 @@ void main() {
 
   setUp(mockPathProvider);
 
-  Future<void> openPost(WidgetTester tester, {Entry? existing}) async {
+  Future<void> openPost(
+    WidgetTester tester, {
+    Entry? existing,
+    List<Entry> others = const [],
+  }) async {
     await tester.runAsync(() async {
       store = JournalStore(
         Directory.systemTemp.createTempSync('open_timeline_post_'),
       );
       await store.load();
       await store.updateSettings(AppSettings(me: 'me@example.com'));
+      for (final o in others) {
+        await store.writeSynced(o, dirty: false);
+      }
       if (existing != null) {
         await store.writeSynced(existing, dirty: false);
         for (final m in existing.media) {
@@ -165,6 +172,86 @@ void main() {
     expect(saveEnabled(tester), isTrue);
     await tapSave(tester);
     expect(store.byId(_id)!.title, 'Canal walk');
+  });
+
+  Entry stampOf(List<String> tags) => Entry(
+    id: _id,
+    kind: kindStamp,
+    author: 'me@example.com',
+    time: DateTime.utc(2026, 10, 16, 12),
+    utcOffsetMinutes: 0,
+    series: 'Old trip',
+    country: 'JP',
+    tags: tags,
+    media: const [_photo],
+    updated: DateTime.utc(2026, 10, 16, 13),
+  );
+
+  testWidgets('a post has no event field', (tester) async {
+    await openPost(tester, existing: _post());
+    expect(find.widgetWithText(TextField, 'Event'), findsNothing);
+  });
+
+  testWidgets('a stamp keeps its event among its tags, whatever it is', (
+    tester,
+  ) async {
+    await openPost(tester, existing: stampOf(['Old-trip', 'food']));
+    expect(find.byKey(const ValueKey('event-tag')), findsOneWidget);
+    expect(find.text('#food'), findsOneWidget);
+    expect(saveEnabled(tester), isFalse, reason: 'already in its tags');
+
+    final field = find.widgetWithText(TextField, 'Event');
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.enterText(field, 'Kyoto trip');
+    await tester.pump();
+    expect(find.text('#Kyoto-trip'), findsOneWidget);
+    expect(saveEnabled(tester), isTrue);
+    await tapSave(tester);
+    expect(store.byId(_id)!.series, 'Kyoto trip');
+    expect(store.byId(_id)!.tags, ['Kyoto-trip', 'food']);
+    expect(store.recentTags, containsAll(['Kyoto-trip', 'food']));
+  });
+
+  testWidgets('a post picks up a stamp event as the very same tag', (
+    tester,
+  ) async {
+    await openPost(
+      tester,
+      existing: _post(),
+      others: [
+        Entry(
+          id: '20261012-120000-stmp',
+          kind: kindStamp,
+          author: 'me@example.com',
+          time: DateTime.utc(2026, 10, 12, 12),
+          utcOffsetMinutes: 0,
+          series: 'Kyoto trip',
+          tags: const ['Kyoto-trip'],
+          updated: DateTime.utc(2026, 10, 12, 12),
+        ),
+      ],
+    );
+    final chip = find.text('#Kyoto-trip');
+    await tester.ensureVisible(chip);
+    await tester.pump();
+    await tester.tap(chip);
+    await tester.pump();
+    await tapSave(tester);
+    expect(store.byId(_id)!.tags, ['walk', 'Kyoto-trip']);
+  });
+
+  testWidgets('an older stamp gets its event as a tag once it is saved', (
+    tester,
+  ) async {
+    await openPost(tester, existing: stampOf(['food']));
+    expect(saveEnabled(tester), isFalse);
+    await tester.ensureVisible(find.text('Large'));
+    await tester.pump();
+    await tester.tap(find.text('Large'));
+    await tester.pump();
+    await tapSave(tester);
+    expect(store.byId(_id)!.tags, ['Old-trip', 'food']);
   });
 
   testWidgets('a conflicted post shows the warning; saving clears the flag', (
@@ -321,6 +408,52 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, '+ tag'), 'beach,');
     await tester.pump();
     expect(find.text('#beach'), findsOneWidget);
+    expect(saveEnabled(tester), isTrue);
+  });
+
+  testWidgets('every known tag sits in a scrollable strip, newest first', (
+    tester,
+  ) async {
+    Entry tagged(String id, int day, List<String> tags) => Entry(
+      id: id,
+      author: 'partner@example.com',
+      time: DateTime.utc(2026, 10, day, 12),
+      utcOffsetMinutes: 0,
+      text: id,
+      tags: tags,
+      updated: DateTime.utc(2026, 10, day, 12),
+    );
+    await openPost(
+      tester,
+      existing: _post(),
+      others: [
+        tagged('20261001-120000-aaaa', 1, ['beach']),
+        tagged('20261012-120000-bbbb', 12, ['sea']),
+        tagged('20261005-120000-cccc', 5, ['city']),
+      ],
+    );
+    final chips = find.descendant(
+      of: find.byKey(const ValueKey('tag-strip')),
+      matching: find.byType(ActionChip),
+    );
+    expect(
+      [
+        for (final c in tester.widgetList<ActionChip>(chips))
+          ((c.label as Text).data),
+      ],
+      ['#sea', '#city', '#beach'],
+      reason: 'newest first, without the tag already on the post',
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, '+ tag'), 'ci');
+    await tester.pump();
+    expect(find.text('#city'), findsOneWidget);
+    expect(find.text('#sea'), findsNothing);
+    await tester.ensureVisible(find.text('#city'));
+    await tester.pump();
+    await tester.tap(find.text('#city'));
+    await tester.pump();
+    expect(find.byType(InputChip), findsNWidgets(2));
     expect(saveEnabled(tester), isTrue);
   });
 }

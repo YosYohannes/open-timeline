@@ -70,16 +70,19 @@ Future<Uint8List> cropToPng(ui.Image image, Rect area) async {
   return data!.buffer.asUint8List();
 }
 
-/// Popped from the crop screen to scan another page with the same event.
+/// Popped from the crop screen to add another photo with the same event.
 class AnotherPage {
   const AnotherPage();
 }
 
 class CropPage extends StatefulWidget {
-  const CropPage({super.key, required this.file, this.saved = 0});
+  const CropPage({super.key, required this.file, this.saved = 0, this.notice});
 
   final File file;
   final int saved;
+
+  /// Why the stamps are cropped by hand, shown above the hint.
+  final String? notice;
 
   @override
   State<CropPage> createState() => _CropPageState();
@@ -190,12 +193,23 @@ class _CropPageState extends State<CropPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
+                  if (widget.notice != null)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 4),
+                      child: Text(
+                        widget.notice!,
+                        textAlign: TextAlign.center,
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ),
                   Text(
                     saved == 0
-                        ? 'Drag the corners to frame one stamp. A page with several stamps can be cropped one at a time.'
+                        ? 'Drag the corners to frame one stamp. A photo with several stamps can be cropped one at a time.'
                         : saved == 1
-                        ? '1 stamp saved. Crop another, scan another page, or tap Done.'
-                        : '$saved stamps saved. Crop another, scan another page, or tap Done.',
+                        ? '1 stamp saved. Crop another, add another photo, or tap Done.'
+                        : '$saved stamps saved. Crop another, add another photo, or tap Done.',
                     textAlign: TextAlign.center,
                     style: theme.textTheme.bodySmall,
                   ),
@@ -212,8 +226,8 @@ class _CropPageState extends State<CropPage> {
                           ? null
                           : () =>
                                 Navigator.of(context).pop(const AnotherPage()),
-                      icon: const Icon(Icons.document_scanner_outlined),
-                      label: const Text('Scan another page'),
+                      icon: const Icon(Icons.add_a_photo_outlined),
+                      label: const Text('Another photo'),
                     ),
                   FilterChip(
                     key: const ValueKey('square'),

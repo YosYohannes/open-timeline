@@ -36,9 +36,6 @@ String entryToMarkdown(Entry e) {
   if (e.blend) {
     b.write('blend: true\n');
   }
-  if (e.cutout.isNotEmpty) {
-    b.write('cutout: ${_q(e.cutout)}\n');
-  }
   final color = e.color;
   if (color != null) {
     final rgb = (color & 0xFFFFFF).toRadixString(16).padLeft(6, '0');
@@ -191,7 +188,6 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
   final country = _str(yaml['country'])?.toUpperCase();
   final sizeText = _str(yaml['size'])?.toLowerCase();
   final size = stampSizes.contains(sizeText) ? sizeText! : sizeMedium;
-  final cutout = _str(yaml['cutout'])?.trim() ?? '';
 
   var bodyLines = lines.sublist(headerEnd + 1);
   final marker = bodyLines.indexWhere((l) => l.trim() == mediaBlockMarker);
@@ -221,7 +217,6 @@ Entry entryFromMarkdown(String source, {String? fallbackId}) {
     country: country,
     size: size,
     blend: _bool(yaml['blend']),
-    cutout: cutout,
   );
 }
 

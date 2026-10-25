@@ -111,8 +111,8 @@ class _HomePageState extends State<HomePage> {
               },
             ),
             ListTile(
-              leading: const Icon(Icons.document_scanner_outlined),
-              title: const Text('Scan a stamp'),
+              leading: const Icon(Icons.add_a_photo_outlined),
+              title: const Text('Add stamps'),
               subtitle: const Text('Add it to your collection'),
               onTap: () {
                 Navigator.pop(ctx);
@@ -342,9 +342,9 @@ class _HomePageState extends State<HomePage> {
       ),
       floatingActionButton: _tab == 3
           ? FloatingActionButton(
-              tooltip: 'Scan a stamp',
+              tooltip: 'Add stamps',
               onPressed: () => newStamp(context),
-              child: const Icon(Icons.document_scanner_outlined),
+              child: const Icon(Icons.add_a_photo_outlined),
             )
           : FloatingActionButton(
               tooltip: 'New',

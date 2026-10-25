@@ -244,192 +244,35 @@ void main() {
       expect(aspectRatioOf(File('${dir.path}/missing.png')), 1.0);
     });
 
-    Uint8List fill(int w, int h, List<int> paper, {List<int>? ink}) {
-      final out = Uint8List(w * h * 4);
-      for (var y = 0; y < h; y++) {
-        for (var x = 0; x < w; x++) {
-          final centre =
-              x > w ~/ 4 && x < w * 3 ~/ 4 && y > h ~/ 4 && y < h * 3 ~/ 4;
-          final c = centre && ink != null ? ink : paper;
-          final i = (y * w + x) * 4;
-          out[i] = c[0];
-          out[i + 1] = c[1];
-          out[i + 2] = c[2];
-          out[i + 3] = 255;
-        }
-      }
-      return out;
-    }
-
-    test('the paper colour comes from the edge, not from the ink', () {
-      final paper = estimatePaper(
-        fill(40, 40, [241, 230, 200], ink: [30, 78, 154]),
-        40,
-        40,
-      )!;
-      expect(
-        [
-          (paper.r * 255).round(),
-          (paper.g * 255).round(),
-          (paper.b * 255).round(),
-        ],
-        [241, 230, 200],
-      );
-    });
-
-    test('light paper blends and dark or strongly coloured paper does not', () {
-      bool light(List<int> c) =>
-          isLightPaper(Color.fromARGB(255, c[0], c[1], c[2]));
-      expect(light([255, 255, 255]), isTrue);
-      expect(light([241, 230, 200]), isTrue);
-      expect(light([201, 207, 214]), isTrue);
-      expect(light([245, 217, 75]), isFalse);
-      expect(light([31, 61, 43]), isFalse);
-    });
-
-    group('removing the paper', () {
-      const paper = [241, 230, 200];
-      const ink = [30, 78, 154];
-
-      Uint8List scene(
-        int w,
-        int h,
-        bool Function(int x, int y) isInk, {
-        bool Function(int x, int y)? isHole,
-      }) {
-        final out = Uint8List(w * h * 4);
-        for (var y = 0; y < h; y++) {
-          for (var x = 0; x < w; x++) {
-            final c = isInk(x, y) && !(isHole?.call(x, y) ?? false)
-                ? ink
-                : paper;
-            final i = (y * w + x) * 4;
-            out[i] = c[0];
-            out[i + 1] = c[1];
-            out[i + 2] = c[2];
-            out[i + 3] = 255;
+    test(
+      'a picture with a transparent background is trimmed to its subject',
+      () {
+        final rgba = Uint8List(60 * 40 * 4);
+        for (var y = 10; y < 30; y++) {
+          for (var x = 20; x < 50; x++) {
+            rgba[(y * 60 + x) * 4 + 3] = 255;
           }
         }
-        return out;
-      }
+        final r = trimToSubject(rgba, 60, 40)!;
+        expect((r.width, r.height), (30, 20));
+        expect(trimToSubject(Uint8List(60 * 40 * 4), 60, 40), isNull);
+      },
+    );
 
-      int alphaAt(BackgroundRemoved r, int x, int y) =>
-          r.rgba[(y * r.width + x) * 4 + 3];
-
-      test('the stamp is cut out and trimmed to its outline', () {
-        final r = removeBackground(
-          scene(100, 100, (x, y) => x >= 20 && x < 70 && y >= 30 && y < 60),
-          100,
-          100,
-        )!;
-        expect(r.width, closeTo(50, 2));
-        expect(r.height, closeTo(30, 2));
-        expect(alphaAt(r, r.width ~/ 2, r.height ~/ 2), 255);
-      });
-
-      test('paper inside the stamp is kept, paper outside is not', () {
-        final r = removeBackground(
-          scene(
-            100,
-            100,
-            (x, y) => x >= 10 && x < 90 && y >= 10 && y < 90,
-            isHole: (x, y) => x >= 40 && x < 60 && y >= 40 && y < 60,
-          ),
-          100,
-          100,
-        )!;
-        final mid = r.width ~/ 2;
-        expect(alphaAt(r, mid, r.height ~/ 2), 255);
-        final inner = removeBackground(
-          scene(
-            100,
-            100,
-            (x, y) => x >= 10 && x < 90 && y >= 10 && y < 90,
-            isHole: (x, y) => x < 30,
-          ),
-          100,
-          100,
-        )!;
-        expect(inner.width, lessThan(70));
-      });
-
-      test('a speck of dust away from the stamp is dropped', () {
-        final r = removeBackground(
-          scene(
-            120,
-            100,
-            (x, y) =>
-                (x >= 20 && x < 70 && y >= 30 && y < 70) ||
-                (x >= 105 && x < 108 && y >= 10 && y < 13),
-          ),
-          120,
-          100,
-        )!;
-        expect(r.width, closeTo(50, 2));
-      });
-
-      test('nothing is removed from a blank page or a full-bleed image', () {
-        expect(
-          removeBackground(scene(60, 60, (x, y) => false), 60, 60),
-          isNull,
-        );
-        expect(removeBackground(scene(60, 60, (x, y) => true), 60, 60), isNull);
-      });
-
-      test(
-        'a paper colour picked by hand works where the edge is not paper',
-        () {
-          Uint8List tight(int w, int h) => scene(w, h, (x, y) => x >= 20);
-          final guessed = removeBackground(tight(100, 100), 100, 100)!;
-          expect(guessed.width, lessThan(40));
-          final r = removeBackground(
-            tight(100, 100),
-            100,
-            100,
-            paperColor: const Color(0xFFF1E6C8),
-          )!;
-          expect(r.width, closeTo(80, 2));
-          expect(r.height, 100);
-        },
-      );
-
-      test(
-        'an image with a transparent background is trimmed to its subject',
-        () {
-          final rgba = Uint8List(60 * 40 * 4);
-          for (var y = 10; y < 30; y++) {
-            for (var x = 20; x < 50; x++) {
-              rgba[(y * 60 + x) * 4 + 3] = 255;
-            }
+    test('the outline mask marks the stamp, not the corners', () {
+      final rgba = Uint8List(100 * 100 * 4);
+      for (var y = 0; y < 100; y++) {
+        for (var x = 0; x < 100; x++) {
+          if ((x - 50) * (x - 50) + (y - 50) * (y - 50) < 35 * 35) {
+            rgba[(y * 100 + x) * 4 + 3] = 255;
           }
-          final r = trimToSubject(rgba, 60, 40)!;
-          expect((r.width, r.height), (30, 20));
-          expect(trimToSubject(Uint8List(60 * 40 * 4), 60, 40), isNull);
-        },
-      );
-
-      test('a paper colour is read from #RRGGBB only', () {
-        expect(paperOfMethod('#F1E6C8'), const Color(0xFFF1E6C8));
-        expect(paperOfMethod(''), isNull);
-        expect(paperOfMethod('subject'), isNull);
-        expect(paperOfMethod('#12345'), isNull);
-      });
-
-      test('the outline mask marks the stamp, not the corners', () {
-        final r = removeBackground(
-          scene(
-            100,
-            100,
-            (x, y) => (x - 50) * (x - 50) + (y - 50) * (y - 50) < 35 * 35,
-          ),
-          100,
-          100,
-        )!;
-        final mask = maskOf(r.rgba, r.width, r.height);
-        expect(mask.at(0.5, 0.5), isTrue);
-        expect(mask.at(0.02, 0.02), isFalse);
-        expect(mask.at(0.98, 0.98), isFalse);
-      });
+        }
+      }
+      final r = trimToSubject(rgba, 100, 100)!;
+      final mask = maskOf(r.rgba, r.width, r.height);
+      expect(mask.at(0.5, 0.5), isTrue);
+      expect(mask.at(0.02, 0.02), isFalse);
+      expect(mask.at(0.98, 0.98), isFalse);
     });
   });
 
@@ -448,7 +291,7 @@ void main() {
       )..writeAsBytesSync(data!.buffer.asUint8List());
     }
 
-    test('its cut-out is trimmed and cached under its own method', () async {
+    test('its cut-out is trimmed and cached', () async {
       final photo = await png(
         120,
         100,
@@ -466,10 +309,23 @@ void main() {
         ),
       );
       subjectSegmenter = _Fixed(subject);
-      final cut = await cutoutOf(photo, cutoutSubject);
+      final cut = await cutoutOf(photo);
       expect(cut, isNotNull);
       expect(cut!.ratio, closeTo(1.0, 0.05));
-      expect(cachedCutout(photo, cutoutSubject), same(cut));
+      expect(cachedCutout(photo), same(cut));
+    });
+
+    test('a failure of the AI itself is not remembered', () async {
+      final photo = await png(
+        40,
+        40,
+        (c) => c.drawRect(
+          const Rect.fromLTWH(0, 0, 40, 40),
+          Paint()..color = const Color(0xFFCCCCCC),
+        ),
+      );
+      subjectSegmenter = _Fixed(null, error: 'still downloading');
+      expect(await cutoutOf(photo), isNull);
       expect(hasCutout(photo), isFalse);
     });
 
@@ -483,18 +339,23 @@ void main() {
         ),
       );
       subjectSegmenter = _Fixed(null);
-      expect(await cutoutOf(photo, cutoutSubject), isNull);
+      expect(await cutoutOf(photo), isNull);
+      expect(hasCutout(photo), isTrue);
     });
   });
 }
 
 class _Fixed implements SubjectSegmenter {
-  _Fixed(this.result);
+  _Fixed(this.result, {this.error});
 
   final File? result;
+  final String? error;
 
   @override
-  String? get lastError => null;
+  String? get lastError => error;
+
+  @override
+  Future<List<Rect>?> detect(File image) async => null;
 
   @override
   Future<File?> segment(File image) async => result;

@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -21,7 +22,6 @@ import '../booklet/stamp_cutout.dart';
 import '../booklet/stamp_image.dart';
 import '../booklet/subject_segmenter.dart';
 import '../stamp/country_picker.dart';
-import '../stamp/paper_picker.dart';
 import '../stamp/stamp_scan.dart';
 import '../widgets/action_row.dart';
 import '../widgets/format.dart';
@@ -36,18 +36,18 @@ class PostPage extends StatefulWidget {
     super.key,
     required this.entry,
     this.isNew = false,
-    this.scanner,
+    this.photos,
   });
 
   final Entry entry;
   final bool isNew;
-  final StampScanner? scanner;
+  final StampPhotos? photos;
 
   @override
   State<PostPage> createState() => _PostPageState();
 }
 
-class _PostPageState extends State<PostPage> {
+class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
   late final JournalStore _store;
   late final Entry _original;
   final _picker = ImagePicker();
@@ -65,16 +65,21 @@ class _PostPageState extends State<PostPage> {
   late final TextEditingController _series;
   final _tagInput = TextEditingController();
   final _tagFocus = FocusNode();
+  final _seriesFocus = FocusNode();
+  final _seriesKey = GlobalKey();
+  final _seriesLink = LayerLink();
+  OverlayEntry? _seriesEntry;
+  Timer? _revealTimer;
   final _tagFieldKey = GlobalKey();
+  final _tagsKey = GlobalKey();
   late List<String> _tags;
   late List<String> _media;
   final _rev = ValueNotifier<int>(0);
   String? _countryCode;
   late String _size;
   late bool _blend;
-  late String _cutout;
-  String _previewKey = '';
   Future<Cutout?>? _preview;
+  String _previewKey = '';
 
   final List<String> _imported = [];
 
@@ -100,10 +105,22 @@ class _PostPageState extends State<PostPage> {
     _countryCode = e.country;
     _size = e.size;
     _blend = e.blend;
-    _cutout = e.cutout;
     _tagInput.addListener(_changed);
-    _tagFocus.addListener(_changed);
-    _tags = [...e.tags];
+    _tagFocus.addListener(() {
+      _changed();
+      if (_tagFocus.hasFocus) _revealFocused();
+    });
+    WidgetsBinding.instance.addObserver(this);
+    _series.addListener(_syncSeriesList);
+    _seriesFocus.addListener(() {
+      _changed();
+      _syncSeriesList();
+      if (_seriesFocus.hasFocus) _revealFocused();
+    });
+    _tags = [
+      for (final t in e.tags)
+        if (!_isEvent(t, e)) t,
+    ];
     _media = [...e.media];
     if (widget.isNew && _isStamp) _imported.addAll(e.media);
     final lastLocated = _store.entries.where((x) => x.hasLocation).firstOrNull;
@@ -120,6 +137,9 @@ class _PostPageState extends State<PostPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _seriesEntry?.remove();
+    _seriesEntry?.dispose();
     _rev.dispose();
     _text.dispose();
     _place.dispose();
@@ -127,6 +147,8 @@ class _PostPageState extends State<PostPage> {
     _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
+    _revealTimer?.cancel();
+    _seriesFocus.dispose();
     super.dispose();
   }
 
@@ -138,6 +160,20 @@ class _PostPageState extends State<PostPage> {
 
   bool get _isStamp => _original.isStamp;
 
+  bool _isEvent(String tag, Entry e) =>
+      e.isStamp &&
+      tag.toLowerCase() == (normalizeTag(e.series) ?? '').toLowerCase();
+
+  /// Spelled the way a tag typed by hand would be, so posts can match it.
+  String get _event => _isStamp ? normalizeTag(_series.text) ?? '' : '';
+
+  /// A stamp's event is also one of its tags, so posts can use it too.
+  List<String> get _allTags => [
+    if (_event.isNotEmpty) _event,
+    for (final t in _tags)
+      if (t.toLowerCase() != _event.toLowerCase()) t,
+  ];
+
   bool get _dirty {
     final o = _original;
     return _timeChanged ||
@@ -148,11 +184,13 @@ class _PostPageState extends State<PostPage> {
         _countryCode != o.country ||
         _size != o.size ||
         _blend != o.blend ||
-        _cutout != o.cutout ||
         _lat != o.lat ||
         _lon != o.lon ||
         _tagInput.text.trim().isNotEmpty ||
-        !listEquals(_tags, o.tags) ||
+        !listEquals(_tags, [
+          for (final t in o.tags)
+            if (!_isEvent(t, o)) t,
+        ]) ||
         !listEquals(_media, o.media);
   }
 
@@ -164,7 +202,7 @@ class _PostPageState extends State<PostPage> {
     var e = _original.copyWith(
       title: _title.text.trim(),
       text: _text.text,
-      tags: List.of(_tags),
+      tags: _allTags,
       media: List.of(_media),
       lat: _lat,
       lon: _lon,
@@ -173,7 +211,6 @@ class _PostPageState extends State<PostPage> {
       country: _countryCode,
       size: _size,
       blend: _blend,
-      cutout: _cutout,
       color: _isMine ? _store.settings.myColor : null,
     );
     if (_timeChanged) {
@@ -395,38 +432,38 @@ class _PostPageState extends State<PostPage> {
     if (_mediaBusy) return;
     setState(() => _mediaBusy = true);
     try {
-      final file = await scanWithMessage(
+      final photo = await askForPhoto(
         context,
-        widget.scanner ?? PlatformStampScanner(),
+        widget.photos ?? PlatformStampPhotos(),
       );
-      if (file == null) return;
-      if (!mounted) return;
-      final crop = (await cropFromPage(Navigator.of(context), file)).crop;
+      if (photo == null || !mounted) return;
+      final File? crop;
       try {
-        await file.delete();
-      } catch (_) {}
+        crop = await cropOneStamp(context, photo);
+      } finally {
+        try {
+          await photo.delete();
+        } catch (_) {}
+      }
       if (crop == null) return;
-      final cropped = crop;
       try {
-        final name = await _store.importMedia(_original, cropped);
+        final name = await _store.importMedia(_original, crop);
         final old = _media.toList();
         _imported.add(name);
-        final paper = await paperColorOf(_store.mediaFile(_original, name));
         if (mounted) {
           setState(() {
             _media = [name];
-            _blend = paper != null && isLightPaper(paper);
-            _cutout = '';
+            _blend = true;
           });
         }
         _deleteFiles(old.where(_imported.contains));
       } finally {
         try {
-          await cropped.delete();
+          await crop.delete();
         } catch (_) {}
       }
     } catch (e) {
-      _snack("Couldn't scan: ${_short(e)}");
+      _snack("Couldn't use that photo: ${_short(e)}");
     } finally {
       if (mounted) setState(() => _mediaBusy = false);
     }
@@ -561,6 +598,7 @@ class _PostPageState extends State<PostPage> {
   void _addTag(String raw) {
     final t = normalizeTag(raw);
     if (t == null) return;
+    if (t.toLowerCase() == _event.toLowerCase()) return;
     if (_tags.any((x) => x.toLowerCase() == t.toLowerCase())) return;
     setState(() => _tags = [..._tags, t]);
   }
@@ -574,19 +612,28 @@ class _PostPageState extends State<PostPage> {
     }
   }
 
-  /// Chips grow the form above the field; keep the field on screen.
-  void _revealTagField() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _tagFieldKey.currentContext;
-      if (ctx != null && ctx.mounted) {
+  @override
+  void didChangeMetrics() {
+    if (_seriesFocus.hasFocus || _tagFocus.hasFocus) _revealFocused();
+  }
+
+  /// Waits for the keyboard to stop moving, then lifts the focused field with what it shows above it.
+  void _revealFocused() {
+    _revealTimer?.cancel();
+    _revealTimer = Timer(const Duration(milliseconds: 150), () {
+      final series = _seriesFocus.hasFocus;
+      final ctx = (series ? _seriesKey : _tagsKey).currentContext;
+      if (mounted && ctx != null && ctx.mounted) {
         Scrollable.ensureVisible(
           ctx,
-          duration: const Duration(milliseconds: 150),
-          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+          alignment: series ? 0.02 : 1,
         );
       }
     });
   }
+
+  void _revealTagField() => _revealFocused();
 
   void _onTagInputChanged(String v) {
     if (!v.contains(',')) return;
@@ -744,7 +791,9 @@ class _PostPageState extends State<PostPage> {
           ],
         ),
         body: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          keyboardDismissBehavior: _seriesFocus.hasFocus
+              ? ScrollViewKeyboardDismissBehavior.manual
+              : ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -775,19 +824,7 @@ class _PostPageState extends State<PostPage> {
               ),
               const SizedBox(height: 16),
               if (_isStamp) ...[
-                TextField(
-                  controller: _series,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Series',
-                    hintText: 'e.g. JR West eki stamps',
-                    prefixIcon: Icon(Icons.collections_bookmark_outlined),
-                    border: OutlineInputBorder(),
-                    isDense: true,
-                  ),
-                ),
-                _seriesSuggestions(),
+                _eventField(),
               ] else ...[
                 TextField(
                   controller: _title,
@@ -818,8 +855,44 @@ class _PostPageState extends State<PostPage> {
               _locationRow(theme),
               const SizedBox(height: 12),
               _tagsBlock(),
+              if (_seriesFocus.hasFocus) const SizedBox(height: 200),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _eventField() {
+    return CompositedTransformTarget(
+      key: _seriesKey,
+      link: _seriesLink,
+      child: TextField(
+        key: const ValueKey('series-field'),
+        controller: _series,
+        focusNode: _seriesFocus,
+        textCapitalization: TextCapitalization.words,
+        textInputAction: TextInputAction.next,
+        decoration: InputDecoration(
+          labelText: 'Event',
+          hintText: 'e.g. Kyoto trip',
+          prefixIcon: const Icon(Icons.collections_bookmark_outlined),
+          suffixIcon: _store.seriesUsage.isEmpty
+              ? null
+              : IconButton(
+                  key: const ValueKey('series-dropdown'),
+                  icon: Icon(
+                    _seriesFocus.hasFocus
+                        ? Icons.arrow_drop_up
+                        : Icons.arrow_drop_down,
+                  ),
+                  tooltip: 'Recent events',
+                  onPressed: () => _seriesFocus.hasFocus
+                      ? _seriesFocus.unfocus()
+                      : _seriesFocus.requestFocus(),
+                ),
+          border: const OutlineInputBorder(),
+          isDense: true,
         ),
       ),
     );
@@ -1063,6 +1136,7 @@ class _PostPageState extends State<PostPage> {
 
   Widget _tagsBlock() {
     return Column(
+      key: _tagsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
@@ -1070,6 +1144,12 @@ class _PostPageState extends State<PostPage> {
           runSpacing: 4,
           crossAxisAlignment: WrapCrossAlignment.center,
           children: [
+            if (_event.isNotEmpty)
+              Chip(
+                key: const ValueKey('event-tag'),
+                avatar: const Icon(Icons.collections_bookmark_outlined),
+                label: Text('#$_event'),
+              ),
             for (final t in _tags)
               InputChip(
                 label: Text('#$t'),
@@ -1113,19 +1193,11 @@ class _PostPageState extends State<PostPage> {
   }
 
   Future<Cutout?> _previewCutout(File file) {
-    final key = '${file.path}|$_cutout';
-    if (key != _previewKey) {
-      _previewKey = key;
-      _preview = cutoutOf(file, _cutout);
+    if (file.path != _previewKey) {
+      _previewKey = file.path;
+      _preview = cutoutOf(file);
     }
     return _preview!;
-  }
-
-  Future<void> _pickPaper(File file) async {
-    final picked = await Navigator.of(context).push<String>(
-      MaterialPageRoute(builder: (_) => PaperPickerPage(file: file)),
-    );
-    if (picked != null && mounted) setState(() => _cutout = picked);
   }
 
   Widget _stampPreview(ThemeData theme) {
@@ -1177,10 +1249,7 @@ class _PostPageState extends State<PostPage> {
                                       color: Colors.black54,
                                       padding: const EdgeInsets.all(6),
                                       child: Text(
-                                        _cutout == cutoutSubject
-                                            ? "AI removal didn't work: ${subjectSegmenter.lastError ?? 'unknown reason'}"
-                                            : "Couldn't remove the background. "
-                                                  'Try picking the paper colour.',
+                                        "AI removal didn't work: ${subjectSegmenter.lastError ?? 'no item found'}",
                                         textAlign: TextAlign.center,
                                         style: TextStyle(
                                           color: Colors.white,
@@ -1200,8 +1269,8 @@ class _PostPageState extends State<PostPage> {
         ActionRow(
           items: [
             ActionItem(
-              icon: Icons.document_scanner_outlined,
-              label: 'Scan again',
+              icon: Icons.photo_camera_outlined,
+              label: 'New photo',
               onPressed: _mediaBusy ? null : _rescan,
             ),
           ],
@@ -1217,50 +1286,11 @@ class _PostPageState extends State<PostPage> {
           contentPadding: EdgeInsets.zero,
           title: const Text('Remove background'),
           subtitle: const Text(
-            'Cuts the stamp out of its paper so it sits on the page',
+            'The phone cuts the stamp out of its picture so it sits on the page',
           ),
           value: _blend,
           onChanged: (v) => setState(() => _blend = v),
         ),
-        if (_blend && file != null) ...[
-          SegmentedButton<bool>(
-            key: const ValueKey('cutout-method'),
-            showSelectedIcon: false,
-            segments: const [
-              ButtonSegment(value: false, label: Text('Paper colour')),
-              ButtonSegment(value: true, label: Text('AI removal')),
-            ],
-            selected: {_cutout == cutoutSubject},
-            onSelectionChanged: (v) => setState(() {
-              _cutout = v.first ? cutoutSubject : '';
-            }),
-          ),
-          if (_cutout != cutoutSubject)
-            ListTile(
-              key: const ValueKey('paper-pick'),
-              contentPadding: EdgeInsets.zero,
-              leading: _cutout.isEmpty
-                  ? const Icon(Icons.auto_fix_high_outlined)
-                  : Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: paperOfMethod(_cutout),
-                        border: Border.all(color: theme.colorScheme.outline),
-                        borderRadius: BorderRadius.circular(4),
-                      ),
-                    ),
-              title: const Text('Paper colour'),
-              subtitle: Text(
-                _cutout.isEmpty
-                    ? 'Found from the edge of the picture'
-                    : _cutout,
-              ),
-              trailing: const Text('Pick'),
-              onTap: () => _pickPaper(file),
-            ),
-          const SizedBox(height: 4),
-        ],
         const SizedBox(height: 4),
         SegmentedButton<String>(
           key: const ValueKey('size-choice'),
@@ -1277,31 +1307,89 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  Widget _seriesSuggestions() {
+  List<({String name, int count, DateTime last})> get _seriesOptions {
     final typed = _series.text.trim().toLowerCase();
-    final suggestions = _store.allSeries
-        .where((t) => t.toLowerCase() != typed)
-        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
-        .take(10)
-        .toList();
-    if (suggestions.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: SizedBox(
-        height: 36,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            for (final t in suggestions)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ActionChip(
-                  label: Text(t),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _series.text = t,
-                ),
+    final usage = _store.seriesUsage;
+    final exact = usage.any((s) => s.name.toLowerCase() == typed);
+    return [
+      for (final s in usage)
+        if (typed.isEmpty || exact || s.name.toLowerCase().contains(typed)) s,
+    ];
+  }
+
+  void _syncSeriesList() {
+    if (!mounted) return;
+    final show = _seriesFocus.hasFocus && _seriesOptions.isNotEmpty;
+    if (!show) {
+      _seriesEntry?.remove();
+      _seriesEntry?.dispose();
+      _seriesEntry = null;
+    } else if (_seriesEntry == null) {
+      _seriesEntry = OverlayEntry(builder: (_) => _seriesList());
+      Overlay.of(context).insert(_seriesEntry!);
+    } else {
+      _seriesEntry!.markNeedsBuild();
+    }
+  }
+
+  Widget _seriesList() {
+    final options = _seriesOptions;
+    final typed = _series.text.trim().toLowerCase();
+    final width = MediaQuery.sizeOf(context).width - 32;
+    final theme = Theme.of(context);
+    return CompositedTransformFollower(
+      link: _seriesLink,
+      targetAnchor: Alignment.bottomLeft,
+      offset: const Offset(0, 4),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          child: Material(
+            key: const ValueKey('series-list'),
+            elevation: 3,
+            color: theme.colorScheme.surfaceContainerHigh,
+            shape: RoundedRectangleBorder(
+              borderRadius: kBorderRadius,
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 168),
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  for (final s in options)
+                    ListTile(
+                      key: ValueKey('series-${s.name}'),
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(
+                        s.name.toLowerCase() == typed
+                            ? Icons.check
+                            : Icons.history,
+                        size: 20,
+                      ),
+                      title: Text(
+                        s.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Text(
+                        '${s.count} ${s.count == 1 ? 'item' : 'items'} · '
+                        '${DateFormat('d MMM yyyy').format(s.last.toLocal())}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      onTap: () {
+                        _series.text = s.name;
+                        _seriesFocus.unfocus();
+                      },
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -1338,18 +1426,18 @@ class _PostPageState extends State<PostPage> {
         .trim()
         .replaceAll(RegExp(r'^#+'), '')
         .toLowerCase();
-    final chosen = _tags.map((t) => t.toLowerCase()).toSet();
-    final suggestions = _store.allTags
-        .where((t) => !chosen.contains(t.toLowerCase()))
-        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
-        .take(10)
-        .toList();
-    if (suggestions.isEmpty || !(_tagFocus.hasFocus || typed.isNotEmpty)) {
-      return const SizedBox.shrink();
-    }
+    final chosen = _allTags.map((t) => t.toLowerCase()).toSet();
+    final suggestions = [
+      for (final t in _store.recentTags)
+        if (!chosen.contains(t.toLowerCase()) &&
+            (typed.isEmpty || t.toLowerCase().contains(typed)))
+          t,
+    ];
+    if (suggestions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(
+        key: const ValueKey('tag-strip'),
         height: 36,
         child: ListView(
           scrollDirection: Axis.horizontal,

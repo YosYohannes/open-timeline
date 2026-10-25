@@ -54,7 +54,6 @@ class Entry {
     this.country,
     this.size = sizeMedium,
     this.blend = false,
-    this.cutout = '',
   });
 
   factory Entry.create({
@@ -119,13 +118,9 @@ class Entry {
   /// Collectibles only: how big the item is drawn on a booklet page.
   final String size;
 
-  /// Collectibles only: show the item without its paper, as if printed on the page.
+  /// Collectibles only: show the item cut out of its background, as if printed
+  /// on the page.
   final bool blend;
-
-  /// Collectibles only: how the background is removed. Empty finds the paper
-  /// colour by itself, `#RRGGBB` is a paper colour picked by hand and
-  /// `subject` asks the phone to find the item.
-  final String cutout;
 
   bool get isStamp => kind == kindStamp;
 
@@ -165,7 +160,6 @@ class Entry {
     Object? country = _keep,
     String? size,
     bool? blend,
-    String? cutout,
   }) {
     return Entry(
       id: id,
@@ -188,7 +182,6 @@ class Entry {
       country: identical(country, _keep) ? this.country : country as String?,
       size: size ?? this.size,
       blend: blend ?? this.blend,
-      cutout: cutout ?? this.cutout,
     );
   }
 }

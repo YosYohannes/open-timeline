@@ -173,6 +173,41 @@ class JournalStore extends ChangeNotifier {
 
   List<Booklet> get booklets => buildBooklets(_visible);
 
+  /// Tags with the most recently used first.
+  List<String> get recentTags {
+    final latest = <String, DateTime>{};
+    for (final e in _visible) {
+      for (final t in e.tags) {
+        final seen = latest[t];
+        if (seen == null || e.time.isAfter(seen)) latest[t] = e.time;
+      }
+    }
+    return _newestFirst(latest);
+  }
+
+  /// Each series with how many items it has and when it was last used, the
+  /// most recent first.
+  List<({String name, int count, DateTime last})> get seriesUsage {
+    final count = <String, int>{};
+    final latest = <String, DateTime>{};
+    for (final e in _visible) {
+      if (!e.isCollectible || e.series.isEmpty) continue;
+      count[e.series] = (count[e.series] ?? 0) + 1;
+      final seen = latest[e.series];
+      if (seen == null || e.time.isAfter(seen)) latest[e.series] = e.time;
+    }
+    return [
+      for (final name in _newestFirst(latest))
+        (name: name, count: count[name]!, last: latest[name]!),
+    ];
+  }
+
+  List<String> _newestFirst(Map<String, DateTime> latest) =>
+      latest.keys.toList()..sort((a, b) {
+        final c = latest[b]!.compareTo(latest[a]!);
+        return c != 0 ? c : _compareText(a, b);
+      });
+
   List<String> get allSeries {
     final names = <String>{
       for (final e in _visible)

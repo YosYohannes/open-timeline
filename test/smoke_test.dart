@@ -39,7 +39,7 @@ void main() {
   });
 
   testWidgets(
-    'the + button offers a post or a stamp scan, and the filter has a Collection view',
+    'the + button offers a post or stamps, and the filter has a Collection view',
     (WidgetTester tester) async {
       late JournalStore store;
       await tester.runAsync(() async {
@@ -62,7 +62,7 @@ void main() {
       await tester.tap(find.byTooltip('New'));
       await tester.pumpAndSettle();
       expect(find.text('New post'), findsOneWidget);
-      expect(find.text('Scan a stamp'), findsOneWidget);
+      expect(find.text('Add stamps'), findsOneWidget);
       await tester.tapAt(const Offset(10, 10));
       await tester.pumpAndSettle();
 

@@ -77,12 +77,12 @@ class _BookletPageState extends State<BookletPage> {
     );
   }
 
-  List<(File, String)> _cutoutFiles(Booklet booklet) {
+  List<File> _cutoutFiles(Booklet booklet) {
     final store = StoreScope.read(context);
     return [
       for (final e in booklet.stamps)
         if (e.blend && e.media.any(isImage))
-          (store.mediaFile(e, e.media.firstWhere(isImage)), e.cutout),
+          store.mediaFile(e, e.media.firstWhere(isImage)),
     ];
   }
 
@@ -90,17 +90,17 @@ class _BookletPageState extends State<BookletPage> {
     final files = _cutoutFiles(booklet);
     final signature = [
       for (final e in booklet.stamps)
-        '${e.id}:${e.media.join(',')}:${e.blend}:${e.size}:${e.cutout}',
+        '${e.id}:${e.media.join(',')}:${e.blend}:${e.size}',
     ].join('|');
     if (signature != _signature) {
       _signature = signature;
       final pending = [
         for (final f in files)
-          if (!hasCutout(f.$1, f.$2)) f,
+          if (!hasCutout(f)) f,
       ];
       _ready = pending.isEmpty
           ? null
-          : Future.wait([for (final f in pending) cutoutOf(f.$1, f.$2)]);
+          : Future.wait([for (final f in pending) cutoutOf(f)]);
     }
     final ready = _ready;
     if (ready == null) return builder(context);
@@ -196,7 +196,7 @@ class _BookletPageState extends State<BookletPage> {
       return CollageItem(id: e.id, ratio: 1.0, size: e.size);
     }
     final file = store.mediaFile(e, image);
-    final cut = e.blend ? cachedCutout(file, e.cutout) : null;
+    final cut = e.blend ? cachedCutout(file) : null;
     return CollageItem(
       id: e.id,
       ratio: cut?.ratio ?? aspectRatioOf(file),

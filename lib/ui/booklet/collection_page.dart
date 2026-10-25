@@ -28,7 +28,7 @@ class CollectionPage extends StatelessWidget {
               Text('No stamps yet', style: theme.textTheme.titleLarge),
               const SizedBox(height: 8),
               Text(
-                'Tap the button to scan your first stamp. Each country gets its own booklet.',
+                'Tap the button to photograph your first stamps. Each country gets its own booklet.',
                 textAlign: TextAlign.center,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onSurfaceVariant,

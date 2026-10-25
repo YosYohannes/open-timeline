@@ -21,9 +21,7 @@ class StampPrint extends StatelessWidget {
     final store = StoreScope.read(context);
     final image = entry.media.where(isImage).firstOrNull;
     final file = image == null ? null : store.mediaFile(entry, image);
-    final cut = entry.blend && file != null
-        ? cachedCutout(file, entry.cutout)
-        : null;
+    final cut = entry.blend && file != null ? cachedCutout(file) : null;
 
     Widget body;
     if (file == null) {

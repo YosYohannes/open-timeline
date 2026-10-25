@@ -47,7 +47,6 @@ bool _changed(Entry side, Entry? base) {
       side.country != base.country ||
       side.size != base.size ||
       side.blend != base.blend ||
-      side.cutout != base.cutout ||
       side.text != base.text ||
       !_sameList(side.tags, base.tags) ||
       !_sameList(side.media, base.media) ||
@@ -151,10 +150,6 @@ Entry mergeEntry({
   final remoteBlend = base == null || remote.blend != base.blend;
   final blend = (localBlend && !remoteBlend) ? local.blend : remote.blend;
 
-  final localCutout = base == null || local.cutout != base.cutout;
-  final remoteCutout = base == null || remote.cutout != base.cutout;
-  final cutout = (localCutout && !remoteCutout) ? local.cutout : remote.cutout;
-
   // ---- text
   final localText = base == null || local.text != base.text;
   final remoteText = base == null || remote.text != base.text;
@@ -195,7 +190,6 @@ Entry mergeEntry({
     country: country,
     size: size,
     blend: blend,
-    cutout: cutout,
     text: text,
     tags: _mergeList(base?.tags ?? const [], local.tags, remote.tags),
     media: _mergeList(base?.media ?? const [], local.media, remote.media),

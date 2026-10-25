@@ -12,7 +12,6 @@ import io.flutter.plugin.common.MethodChannel
 
 @UnstableApi
 class MainActivity : FlutterActivity() {
-    private val scan = DocumentScan(this)
     private val subject = SubjectSegment(this)
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
@@ -46,11 +45,11 @@ class MainActivity : FlutterActivity() {
                     else -> result.notImplemented()
                 }
             }
-        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "open_timeline/scan")
+        MethodChannel(flutterEngine.dartExecutor.binaryMessenger, "open_timeline/subject")
             .setMethodCallHandler { call, result ->
                 when (call.method) {
-                    "scan" -> scan.start(result)
                     "segment" -> subject.run(call.arguments as String, result)
+                    "detect" -> subject.detect(call.arguments as String, result)
                     else -> result.notImplemented()
                 }
             }
@@ -84,13 +83,6 @@ class MainActivity : FlutterActivity() {
             checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
         ) {
             requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
-    }
-
-    @Deprecated("Deprecated in Java")
-    override fun onActivityResult(requestCode: Int, resultCode: Int, data: Intent?) {
-        if (!scan.handle(requestCode, resultCode, data)) {
-            super.onActivityResult(requestCode, resultCode, data)
         }
     }
 }

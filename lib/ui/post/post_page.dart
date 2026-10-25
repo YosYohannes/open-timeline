@@ -162,10 +162,10 @@ class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
 
   bool _isEvent(String tag, Entry e) =>
       e.isStamp &&
-      e.series.isNotEmpty &&
-      tag.toLowerCase() == e.series.toLowerCase();
+      tag.toLowerCase() == (normalizeTag(e.series) ?? '').toLowerCase();
 
-  String get _event => _isStamp ? _series.text.trim() : '';
+  /// Spelled the way a tag typed by hand would be, so posts can match it.
+  String get _event => _isStamp ? normalizeTag(_series.text) ?? '' : '';
 
   /// A stamp's event is also one of its tags, so posts can use it too.
   List<String> get _allTags => [

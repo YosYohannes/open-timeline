@@ -195,7 +195,7 @@ void main() {
   testWidgets('a stamp keeps its event among its tags, whatever it is', (
     tester,
   ) async {
-    await openPost(tester, existing: stampOf(['Old trip', 'food']));
+    await openPost(tester, existing: stampOf(['Old-trip', 'food']));
     expect(find.byKey(const ValueKey('event-tag')), findsOneWidget);
     expect(find.text('#food'), findsOneWidget);
     expect(saveEnabled(tester), isFalse, reason: 'already in its tags');
@@ -205,12 +205,40 @@ void main() {
     await tester.pump();
     await tester.enterText(field, 'Kyoto trip');
     await tester.pump();
-    expect(find.text('#Kyoto trip'), findsOneWidget);
+    expect(find.text('#Kyoto-trip'), findsOneWidget);
     expect(saveEnabled(tester), isTrue);
     await tapSave(tester);
     expect(store.byId(_id)!.series, 'Kyoto trip');
-    expect(store.byId(_id)!.tags, ['Kyoto trip', 'food']);
-    expect(store.recentTags, containsAll(['Kyoto trip', 'food']));
+    expect(store.byId(_id)!.tags, ['Kyoto-trip', 'food']);
+    expect(store.recentTags, containsAll(['Kyoto-trip', 'food']));
+  });
+
+  testWidgets('a post picks up a stamp event as the very same tag', (
+    tester,
+  ) async {
+    await openPost(
+      tester,
+      existing: _post(),
+      others: [
+        Entry(
+          id: '20261012-120000-stmp',
+          kind: kindStamp,
+          author: 'me@example.com',
+          time: DateTime.utc(2026, 10, 12, 12),
+          utcOffsetMinutes: 0,
+          series: 'Kyoto trip',
+          tags: const ['Kyoto-trip'],
+          updated: DateTime.utc(2026, 10, 12, 12),
+        ),
+      ],
+    );
+    final chip = find.text('#Kyoto-trip');
+    await tester.ensureVisible(chip);
+    await tester.pump();
+    await tester.tap(chip);
+    await tester.pump();
+    await tapSave(tester);
+    expect(store.byId(_id)!.tags, ['walk', 'Kyoto-trip']);
   });
 
   testWidgets('an older stamp gets its event as a tag once it is saved', (
@@ -223,7 +251,7 @@ void main() {
     await tester.tap(find.text('Large'));
     await tester.pump();
     await tapSave(tester);
-    expect(store.byId(_id)!.tags, ['Old trip', 'food']);
+    expect(store.byId(_id)!.tags, ['Old-trip', 'food']);
   });
 
   testWidgets('a conflicted post shows the warning; saving clears the flag', (

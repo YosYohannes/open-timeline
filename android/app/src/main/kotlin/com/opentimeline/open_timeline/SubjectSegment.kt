@@ -3,6 +3,8 @@ package com.opentimeline.open_timeline
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
+import android.graphics.Matrix
+import android.media.ExifInterface
 import com.google.mlkit.common.MlKitException
 import com.google.mlkit.vision.common.InputImage
 import com.google.mlkit.vision.segmentation.subject.SubjectSegmentation
@@ -109,7 +111,33 @@ class SubjectSegment(private val context: Context) {
         var sample = 1
         while (max(bounds.outWidth, bounds.outHeight) / sample > MAX_SIDE * 2) sample *= 2
         val options = BitmapFactory.Options().apply { inSampleSize = sample }
-        return BitmapFactory.decodeFile(path, options) ?: throw IllegalStateException("Cannot read $path")
+        val raw = BitmapFactory.decodeFile(path, options) ?: throw IllegalStateException("Cannot read $path")
+        // Flutter shows photos turned by their EXIF orientation, so the boxes must be found on the turned picture.
+        val turn = orientation(path) ?: return raw
+        val upright = Bitmap.createBitmap(raw, 0, 0, raw.width, raw.height, turn, true)
+        if (upright !== raw) raw.recycle()
+        return upright
+    }
+
+    private fun orientation(path: String): Matrix? {
+        val m = Matrix()
+        when (ExifInterface(path).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)) {
+            ExifInterface.ORIENTATION_ROTATE_90 -> m.setRotate(90f)
+            ExifInterface.ORIENTATION_ROTATE_180 -> m.setRotate(180f)
+            ExifInterface.ORIENTATION_ROTATE_270 -> m.setRotate(-90f)
+            ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> m.setScale(-1f, 1f)
+            ExifInterface.ORIENTATION_FLIP_VERTICAL -> m.setScale(1f, -1f)
+            ExifInterface.ORIENTATION_TRANSPOSE -> {
+                m.setRotate(90f)
+                m.postScale(-1f, 1f)
+            }
+            ExifInterface.ORIENTATION_TRANSVERSE -> {
+                m.setRotate(-90f)
+                m.postScale(-1f, 1f)
+            }
+            else -> return null
+        }
+        return m
     }
 
     private companion object {

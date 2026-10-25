@@ -312,6 +312,24 @@ void main() {
       expect(find.text('A normal post'), findsOneWidget);
     });
 
+    testWidgets('a post from this day in an earlier year gets no memory row', (
+      tester,
+    ) async {
+      await pump(tester, EntryFilter());
+      final now = DateTime.now();
+      await tester.runAsync(
+        () => store.save(
+          Entry.create(
+            author: 'a@x.com',
+            now: DateTime(now.year - 1, now.month, now.day, 9),
+          ).copyWith(text: 'A year ago'),
+        ),
+      );
+      await tester.pump();
+      expect(find.text('A year ago'), findsOneWidget);
+      expect(find.text('On this day'), findsNothing);
+    });
+
     testWidgets('the strip disappears when only posts are shown', (
       tester,
     ) async {

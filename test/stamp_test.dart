@@ -169,6 +169,57 @@ void main() {
       expect(store.allSeries, ['100 Castles', 'JR West eki']);
     });
 
+    test('seriesUsage and recentTags put the most recent first', () async {
+      await store.save(
+        stamp(
+          id: '20261001-101500-aaaa',
+          series: 'Old',
+          time: DateTime.utc(2026, 10, 1),
+        ),
+      );
+      await store.save(
+        stamp(
+          id: '20261017-101500-bbbb',
+          series: 'New',
+          time: DateTime.utc(2026, 10, 17),
+        ),
+      );
+      await store.save(
+        stamp(
+          id: '20261016-101500-cccc',
+          series: 'New',
+          time: DateTime.utc(2026, 10, 16),
+        ),
+      );
+      final usage = store.seriesUsage;
+      expect([for (final s in usage) s.name], ['New', 'Old']);
+      expect(usage.first.count, 2);
+      expect(usage.first.last, DateTime.utc(2026, 10, 17));
+
+      Entry post(String id, DateTime t, List<String> tags) => Entry(
+        id: id,
+        author: 'a@x.com',
+        time: t,
+        utcOffsetMinutes: 0,
+        text: id,
+        tags: tags,
+        updated: t,
+      );
+      await store.save(
+        post('20261001-120000-x001', DateTime.utc(2026, 10, 1), ['beach']),
+      );
+      await store.save(
+        post('20261010-120000-y002', DateTime.utc(2026, 10, 10), [
+          'sea',
+          'beach',
+        ]),
+      );
+      await store.save(
+        post('20261012-120000-z003', DateTime.utc(2026, 10, 12), ['city']),
+      );
+      expect(store.recentTags, ['city', 'beach', 'sea']);
+    });
+
     test('deleting a stamp keeps it a stamp for the other phones', () async {
       await store.save(stamp());
       await store.delete('20261017-101500-ab12');

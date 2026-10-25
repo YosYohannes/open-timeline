@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
@@ -46,7 +47,7 @@ class PostPage extends StatefulWidget {
   State<PostPage> createState() => _PostPageState();
 }
 
-class _PostPageState extends State<PostPage> {
+class _PostPageState extends State<PostPage> with WidgetsBindingObserver {
   late final JournalStore _store;
   late final Entry _original;
   final _picker = ImagePicker();
@@ -64,7 +65,13 @@ class _PostPageState extends State<PostPage> {
   late final TextEditingController _series;
   final _tagInput = TextEditingController();
   final _tagFocus = FocusNode();
+  final _seriesFocus = FocusNode();
+  final _seriesKey = GlobalKey();
+  final _seriesLink = LayerLink();
+  OverlayEntry? _seriesEntry;
+  Timer? _revealTimer;
   final _tagFieldKey = GlobalKey();
+  final _tagsKey = GlobalKey();
   late List<String> _tags;
   late List<String> _media;
   final _rev = ValueNotifier<int>(0);
@@ -99,7 +106,17 @@ class _PostPageState extends State<PostPage> {
     _size = e.size;
     _blend = e.blend;
     _tagInput.addListener(_changed);
-    _tagFocus.addListener(_changed);
+    _tagFocus.addListener(() {
+      _changed();
+      if (_tagFocus.hasFocus) _revealFocused();
+    });
+    WidgetsBinding.instance.addObserver(this);
+    _series.addListener(_syncSeriesList);
+    _seriesFocus.addListener(() {
+      _changed();
+      _syncSeriesList();
+      if (_seriesFocus.hasFocus) _revealFocused();
+    });
     _tags = [...e.tags];
     _media = [...e.media];
     if (widget.isNew && _isStamp) _imported.addAll(e.media);
@@ -117,6 +134,9 @@ class _PostPageState extends State<PostPage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _seriesEntry?.remove();
+    _seriesEntry?.dispose();
     _rev.dispose();
     _text.dispose();
     _place.dispose();
@@ -124,6 +144,8 @@ class _PostPageState extends State<PostPage> {
     _title.dispose();
     _tagInput.dispose();
     _tagFocus.dispose();
+    _revealTimer?.cancel();
+    _seriesFocus.dispose();
     super.dispose();
   }
 
@@ -569,19 +591,28 @@ class _PostPageState extends State<PostPage> {
     }
   }
 
-  /// Chips grow the form above the field; keep the field on screen.
-  void _revealTagField() {
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final ctx = _tagFieldKey.currentContext;
-      if (ctx != null && ctx.mounted) {
+  @override
+  void didChangeMetrics() {
+    if (_seriesFocus.hasFocus || _tagFocus.hasFocus) _revealFocused();
+  }
+
+  /// Waits for the keyboard to stop moving, then lifts the focused field with what it shows above it.
+  void _revealFocused() {
+    _revealTimer?.cancel();
+    _revealTimer = Timer(const Duration(milliseconds: 150), () {
+      final series = _seriesFocus.hasFocus;
+      final ctx = (series ? _seriesKey : _tagsKey).currentContext;
+      if (mounted && ctx != null && ctx.mounted) {
         Scrollable.ensureVisible(
           ctx,
-          duration: const Duration(milliseconds: 150),
-          alignment: 0.5,
+          duration: const Duration(milliseconds: 200),
+          alignment: series ? 0.02 : 1,
         );
       }
     });
   }
+
+  void _revealTagField() => _revealFocused();
 
   void _onTagInputChanged(String v) {
     if (!v.contains(',')) return;
@@ -739,7 +770,9 @@ class _PostPageState extends State<PostPage> {
           ],
         ),
         body: SingleChildScrollView(
-          keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+          keyboardDismissBehavior: _seriesFocus.hasFocus
+              ? ScrollViewKeyboardDismissBehavior.manual
+              : ScrollViewKeyboardDismissBehavior.onDrag,
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 48),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -770,19 +803,40 @@ class _PostPageState extends State<PostPage> {
               ),
               const SizedBox(height: 16),
               if (_isStamp) ...[
-                TextField(
-                  controller: _series,
-                  textCapitalization: TextCapitalization.words,
-                  textInputAction: TextInputAction.next,
-                  decoration: const InputDecoration(
-                    labelText: 'Series',
-                    hintText: 'e.g. JR West eki stamps',
-                    prefixIcon: Icon(Icons.collections_bookmark_outlined),
-                    border: OutlineInputBorder(),
-                    isDense: true,
+                CompositedTransformTarget(
+                  key: _seriesKey,
+                  link: _seriesLink,
+                  child: TextField(
+                    key: const ValueKey('series-field'),
+                    controller: _series,
+                    focusNode: _seriesFocus,
+                    textCapitalization: TextCapitalization.words,
+                    textInputAction: TextInputAction.next,
+                    decoration: InputDecoration(
+                      labelText: 'Series',
+                      hintText: 'e.g. JR West eki stamps',
+                      prefixIcon: const Icon(
+                        Icons.collections_bookmark_outlined,
+                      ),
+                      suffixIcon: _store.seriesUsage.isEmpty
+                          ? null
+                          : IconButton(
+                              key: const ValueKey('series-dropdown'),
+                              icon: Icon(
+                                _seriesFocus.hasFocus
+                                    ? Icons.arrow_drop_up
+                                    : Icons.arrow_drop_down,
+                              ),
+                              tooltip: 'Recent series',
+                              onPressed: () => _seriesFocus.hasFocus
+                                  ? _seriesFocus.unfocus()
+                                  : _seriesFocus.requestFocus(),
+                            ),
+                      border: const OutlineInputBorder(),
+                      isDense: true,
+                    ),
                   ),
                 ),
-                _seriesSuggestions(),
               ] else ...[
                 TextField(
                   controller: _title,
@@ -813,6 +867,7 @@ class _PostPageState extends State<PostPage> {
               _locationRow(theme),
               const SizedBox(height: 12),
               _tagsBlock(),
+              if (_seriesFocus.hasFocus) const SizedBox(height: 200),
             ],
           ),
         ),
@@ -1058,6 +1113,7 @@ class _PostPageState extends State<PostPage> {
 
   Widget _tagsBlock() {
     return Column(
+      key: _tagsKey,
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Wrap(
@@ -1222,31 +1278,89 @@ class _PostPageState extends State<PostPage> {
     );
   }
 
-  Widget _seriesSuggestions() {
+  List<({String name, int count, DateTime last})> get _seriesOptions {
     final typed = _series.text.trim().toLowerCase();
-    final suggestions = _store.allSeries
-        .where((t) => t.toLowerCase() != typed)
-        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
-        .take(10)
-        .toList();
-    if (suggestions.isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(top: 8),
-      child: SizedBox(
-        height: 36,
-        child: ListView(
-          scrollDirection: Axis.horizontal,
-          children: [
-            for (final t in suggestions)
-              Padding(
-                padding: const EdgeInsets.only(right: 8),
-                child: ActionChip(
-                  label: Text(t),
-                  visualDensity: VisualDensity.compact,
-                  onPressed: () => _series.text = t,
-                ),
+    final usage = _store.seriesUsage;
+    final exact = usage.any((s) => s.name.toLowerCase() == typed);
+    return [
+      for (final s in usage)
+        if (typed.isEmpty || exact || s.name.toLowerCase().contains(typed)) s,
+    ];
+  }
+
+  void _syncSeriesList() {
+    if (!mounted) return;
+    final show = _seriesFocus.hasFocus && _seriesOptions.isNotEmpty;
+    if (!show) {
+      _seriesEntry?.remove();
+      _seriesEntry?.dispose();
+      _seriesEntry = null;
+    } else if (_seriesEntry == null) {
+      _seriesEntry = OverlayEntry(builder: (_) => _seriesList());
+      Overlay.of(context).insert(_seriesEntry!);
+    } else {
+      _seriesEntry!.markNeedsBuild();
+    }
+  }
+
+  Widget _seriesList() {
+    final options = _seriesOptions;
+    final typed = _series.text.trim().toLowerCase();
+    final width = MediaQuery.sizeOf(context).width - 32;
+    final theme = Theme.of(context);
+    return CompositedTransformFollower(
+      link: _seriesLink,
+      targetAnchor: Alignment.bottomLeft,
+      offset: const Offset(0, 4),
+      child: Align(
+        alignment: Alignment.topLeft,
+        child: SizedBox(
+          width: width,
+          child: Material(
+            key: const ValueKey('series-list'),
+            elevation: 3,
+            color: theme.colorScheme.surfaceContainerHigh,
+            shape: RoundedRectangleBorder(
+              borderRadius: kBorderRadius,
+              side: BorderSide(color: theme.colorScheme.outlineVariant),
+            ),
+            clipBehavior: Clip.antiAlias,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 168),
+              child: ListView(
+                shrinkWrap: true,
+                padding: EdgeInsets.zero,
+                children: [
+                  for (final s in options)
+                    ListTile(
+                      key: ValueKey('series-${s.name}'),
+                      dense: true,
+                      visualDensity: VisualDensity.compact,
+                      leading: Icon(
+                        s.name.toLowerCase() == typed
+                            ? Icons.check
+                            : Icons.history,
+                        size: 20,
+                      ),
+                      title: Text(
+                        s.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      trailing: Text(
+                        '${s.count} ${s.count == 1 ? 'item' : 'items'} · '
+                        '${DateFormat('d MMM yyyy').format(s.last.toLocal())}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                      onTap: () {
+                        _series.text = s.name;
+                        _seriesFocus.unfocus();
+                      },
+                    ),
+                ],
               ),
-          ],
+            ),
+          ),
         ),
       ),
     );
@@ -1284,17 +1398,17 @@ class _PostPageState extends State<PostPage> {
         .replaceAll(RegExp(r'^#+'), '')
         .toLowerCase();
     final chosen = _tags.map((t) => t.toLowerCase()).toSet();
-    final suggestions = _store.allTags
-        .where((t) => !chosen.contains(t.toLowerCase()))
-        .where((t) => typed.isEmpty || t.toLowerCase().contains(typed))
-        .take(10)
-        .toList();
-    if (suggestions.isEmpty || !(_tagFocus.hasFocus || typed.isNotEmpty)) {
-      return const SizedBox.shrink();
-    }
+    final suggestions = [
+      for (final t in _store.recentTags)
+        if (!chosen.contains(t.toLowerCase()) &&
+            (typed.isEmpty || t.toLowerCase().contains(typed)))
+          t,
+    ];
+    if (suggestions.isEmpty) return const SizedBox.shrink();
     return Padding(
       padding: const EdgeInsets.only(top: 8),
       child: SizedBox(
+        key: const ValueKey('tag-strip'),
         height: 36,
         child: ListView(
           scrollDirection: Axis.horizontal,

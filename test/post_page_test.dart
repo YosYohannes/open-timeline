@@ -47,13 +47,20 @@ void main() {
 
   setUp(mockPathProvider);
 
-  Future<void> openPost(WidgetTester tester, {Entry? existing}) async {
+  Future<void> openPost(
+    WidgetTester tester, {
+    Entry? existing,
+    List<Entry> others = const [],
+  }) async {
     await tester.runAsync(() async {
       store = JournalStore(
         Directory.systemTemp.createTempSync('open_timeline_post_'),
       );
       await store.load();
       await store.updateSettings(AppSettings(me: 'me@example.com'));
+      for (final o in others) {
+        await store.writeSynced(o, dirty: false);
+      }
       if (existing != null) {
         await store.writeSynced(existing, dirty: false);
         for (final m in existing.media) {
@@ -321,6 +328,50 @@ void main() {
     await tester.enterText(find.widgetWithText(TextField, '+ tag'), 'beach,');
     await tester.pump();
     expect(find.text('#beach'), findsOneWidget);
+    expect(saveEnabled(tester), isTrue);
+  });
+
+  testWidgets('every known tag sits in a scrollable strip, newest first', (
+    tester,
+  ) async {
+    Entry tagged(String id, int day, List<String> tags) => Entry(
+      id: id,
+      author: 'partner@example.com',
+      time: DateTime.utc(2026, 10, day, 12),
+      utcOffsetMinutes: 0,
+      text: id,
+      tags: tags,
+      updated: DateTime.utc(2026, 10, day, 12),
+    );
+    await openPost(
+      tester,
+      existing: _post(),
+      others: [
+        tagged('20261001-120000-aaaa', 1, ['beach']),
+        tagged('20261012-120000-bbbb', 12, ['sea']),
+        tagged('20261005-120000-cccc', 5, ['city']),
+      ],
+    );
+    final chips = find.descendant(
+      of: find.byKey(const ValueKey('tag-strip')),
+      matching: find.byType(ActionChip),
+    );
+    expect(
+      [
+        for (final c in tester.widgetList<ActionChip>(chips))
+          ((c.label as Text).data),
+      ],
+      ['#sea', '#city', '#beach'],
+      reason: 'newest first, without the tag already on the post',
+    );
+
+    await tester.enterText(find.widgetWithText(TextField, '+ tag'), 'ci');
+    await tester.pump();
+    expect(find.text('#city'), findsOneWidget);
+    expect(find.text('#sea'), findsNothing);
+    await tester.tap(find.text('#city'));
+    await tester.pump();
+    expect(find.byType(InputChip), findsNWidgets(2));
     expect(saveEnabled(tester), isTrue);
   });
 }

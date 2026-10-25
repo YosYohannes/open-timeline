@@ -92,6 +92,7 @@ void main() {
     List<List<Rect>?> found, {
     bool cancel = false,
     String? error,
+    List<Entry> existing = const [],
   }) async {
     final png = await samplePng(tester);
     late FakePhotos photos;
@@ -100,6 +101,9 @@ void main() {
       store = JournalStore(Directory.systemTemp.createTempSync('photo_store_'));
       await store.load();
       await store.updateSettings(AppSettings(me: 'me@x.com'));
+      for (final e in existing) {
+        await store.writeSynced(e, dirty: false);
+      }
       photos = FakePhotos(scratch, png, cancel: cancel);
     });
     subjectSegmenter = FakeFinder(found, error: error);
@@ -428,5 +432,184 @@ void main() {
     final saved = store.entries.single;
     expect(saved.blend, isTrue);
     expect(saved.size, sizeLarge);
+  });
+
+  testWidgets('the series field lists the recent series, newest first', (
+    tester,
+  ) async {
+    Entry older(String id, String series, int day) => Entry(
+      id: id,
+      kind: kindStamp,
+      author: 'me@x.com',
+      time: DateTime.utc(2026, 10, day, 12),
+      utcOffsetMinutes: 0,
+      series: series,
+      updated: DateTime.utc(2026, 10, day, 12),
+    );
+    await open(
+      tester,
+      [
+        [_middle],
+      ],
+      existing: [
+        older('20261001-120000-aaaa', 'Kintetsu', 1),
+        older('20261012-120000-bbbb', 'JR West eki', 12),
+        older('20261008-120000-cccc', '100 Castles', 8),
+      ],
+    );
+    await takePhoto(tester);
+    await useFound(tester);
+    expect(find.byKey(const ValueKey('series-list')), findsNothing);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('series-field')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('series-field')));
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    final names = ['JR West eki', '100 Castles', 'Kintetsu'];
+    final tops = [
+      for (final n in names)
+        tester.getTopLeft(find.byKey(ValueKey('series-$n'))).dy,
+    ];
+    expect(tops, [...tops]..sort(), reason: 'most recent at the top');
+    expect(find.text('1 item · 12 Oct 2026'), findsOneWidget);
+
+    await tester.enterText(find.byKey(const ValueKey('series-field')), 'cast');
+    for (var i = 0; i < 30; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+    expect(find.byKey(const ValueKey('series-100 Castles')), findsOneWidget);
+    expect(find.byKey(const ValueKey('series-Kintetsu')), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('series-100 Castles')));
+    await tester.pump();
+    expect(seriesText(tester), '100 Castles');
+    expect(find.byKey(const ValueKey('series-list')), findsNothing);
+
+    await tester.ensureVisible(find.byKey(const ValueKey('series-dropdown')));
+    await tester.pump();
+    await tester.tap(find.byKey(const ValueKey('series-dropdown')));
+    await tester.pump();
+    expect(find.byKey(const ValueKey('series-Kintetsu')), findsOneWidget);
+    expect(find.byIcon(Icons.check), findsOneWidget);
+  });
+
+  testWidgets('with the keyboard up the page and the series list both scroll', (
+    tester,
+  ) async {
+    Entry made(int i) => Entry(
+      id: '202610${i.toString().padLeft(2, '0')}-120000-aa$i',
+      kind: kindStamp,
+      author: 'me@x.com',
+      time: DateTime.utc(2026, 10, i, 12),
+      utcOffsetMinutes: 0,
+      series: 'Series $i',
+      updated: DateTime.utc(2026, 10, i, 12),
+    );
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      [
+        [_middle],
+      ],
+      existing: [for (var i = 1; i <= 14; i++) made(i)],
+    );
+    await takePhoto(tester);
+    await useFound(tester);
+
+    final view = tester.view;
+    final screen = view.physicalSize.height / view.devicePixelRatio;
+    final keyboard = screen * 0.45;
+    await tester.ensureVisible(find.byKey(const ValueKey('series-field')));
+    await tester.pump();
+    double below() =>
+        tester.getTopLeft(find.text('Add location')).dy -
+        tester.getTopLeft(find.byKey(const ValueKey('series-field'))).dy;
+    final gap = below();
+    await tester.tap(find.byKey(const ValueKey('series-field')));
+    await tester.pump();
+    view.viewInsets = FakeViewPadding(bottom: keyboard * view.devicePixelRatio);
+    addTearDown(view.resetViewInsets);
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    final list = find.byKey(const ValueKey('series-list'));
+    final visibleBottom = screen - keyboard;
+    expect(tester.getTopLeft(list).dy, lessThan(visibleBottom));
+    expect(find.byKey(const ValueKey('series-Series 1')), findsNothing);
+    expect(
+      below(),
+      gap,
+      reason: 'the list floats over the page, not pushes it',
+    );
+
+    final before = tester.getTopLeft(list).dy;
+    await tester.drag(
+      find.byKey(const ValueKey('series-Series 13')),
+      const Offset(0, -900),
+    );
+    await tester.pump();
+    expect(tester.getTopLeft(list).dy, before, reason: 'the list scrolled');
+    expect(find.byKey(const ValueKey('series-Series 1')), findsOneWidget);
+
+    await tester.dragFrom(
+      Offset(8, tester.getTopLeft(list).dy - 20),
+      const Offset(0, -120),
+    );
+    await tester.pump(const Duration(milliseconds: 300));
+    expect(tester.getTopLeft(list).dy, lessThan(before), reason: 'page moved');
+    expect(find.byKey(const ValueKey('series-list')), findsOneWidget);
+  });
+
+  testWidgets('with the keyboard up the tag strip stays above it', (
+    tester,
+  ) async {
+    Entry made(int i) => Entry(
+      id: '202610${i.toString().padLeft(2, '0')}-120000-bb$i',
+      kind: kindStamp,
+      author: 'me@x.com',
+      time: DateTime.utc(2026, 10, i, 12),
+      utcOffsetMinutes: 0,
+      series: 'Series $i',
+      tags: ['t$i'],
+      updated: DateTime.utc(2026, 10, i, 12),
+    );
+    tester.view.physicalSize = const Size(1080, 1920);
+    tester.view.devicePixelRatio = 2.625;
+    addTearDown(tester.view.reset);
+    await open(
+      tester,
+      [
+        [_middle],
+      ],
+      existing: [for (var i = 1; i <= 6; i++) made(i)],
+    );
+    await takePhoto(tester);
+    await useFound(tester);
+
+    final view = tester.view;
+    final screen = view.physicalSize.height / view.devicePixelRatio;
+    final keyboard = screen * 0.45;
+    final field = find.widgetWithText(TextField, '+ tag');
+    await tester.ensureVisible(field);
+    await tester.pump();
+    await tester.tap(field);
+    await tester.pump();
+    view.viewInsets = FakeViewPadding(bottom: keyboard * view.devicePixelRatio);
+    addTearDown(view.resetViewInsets);
+    for (var i = 0; i < 60; i++) {
+      await tester.pump(const Duration(milliseconds: 16));
+    }
+
+    final strip = find.byKey(const ValueKey('tag-strip'));
+    expect(
+      tester.getBottomLeft(strip).dy,
+      lessThanOrEqualTo(screen - keyboard),
+    );
+    expect(tester.getTopLeft(field).dy, lessThan(tester.getTopLeft(strip).dy));
   });
 }
